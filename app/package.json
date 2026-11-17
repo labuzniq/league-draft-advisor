@@ -11,7 +11,8 @@
     "build": "electron-vite build",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "measure": "tsx scripts/measure-advisor.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.10.0",

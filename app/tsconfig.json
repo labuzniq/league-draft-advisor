@@ -11,5 +11,5 @@
     "types": ["node"],
     "paths": { "@renderer/*": ["./src/renderer/src/*"] }
   },
-  "include": ["src", "test","electron.vite.config.ts", "eslint.config.js"]
+  "include": ["src", "test", "scripts", "electron.vite.config.ts", "eslint.config.js"]
 }
