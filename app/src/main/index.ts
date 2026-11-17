@@ -1,3 +1,4 @@
+import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Role } from '@lda/shared'
 import { app, BrowserWindow, ipcMain, safeStorage } from 'electron'
@@ -6,6 +7,7 @@ import { ClaudeAdvisor } from './advisor/advisor'
 import { loadChampions } from './champions/ddragon'
 import { LcuClient, type Recording } from './lcu/client'
 import { locateClient, type LcuCredentials } from './lcu/locate'
+import { Recorder } from './lcu/recorder'
 import { DraftSession } from './session'
 import { SettingsStore, type KeyCipher } from './settings'
 import { loadStats } from './stats/loader'
@@ -24,6 +26,27 @@ async function startFakeClient(): Promise<() => Promise<LcuCredentials>> {
   const fake = await startFakeLcu(recording as Recording)
   recording.events.forEach((event, index) => setTimeout(() => void fake.send(index), event.atMs))
   return async () => fake.creds
+}
+
+function recordingFileName(): string {
+  return `recording-${new Date().toISOString().replace(/[:.]/g, '-')}.json`
+}
+
+let recorder: Recorder | undefined
+
+function saveRecording(): void {
+  if (!recorder?.hasEvents()) return
+  writeFileSync(join(app.getPath('desktop'), recordingFileName()), JSON.stringify(recorder.stop(), null, 2))
+}
+
+function makeRecordingClient(creds: LcuCredentials): LcuClient {
+  const client = new LcuClient(creds)
+  recorder = new Recorder(client)
+  recorder.start().catch((error: unknown) => console.error('Recording could not start:', error))
+  client.onSession((session) => {
+    if (session === null) saveRecording()
+  })
+  return client
 }
 
 function createWindow(): BrowserWindow {
@@ -51,13 +74,15 @@ async function main(): Promise<void> {
   const userData = app.getPath('userData')
   const cacheDir = join(userData, 'cache')
   const settings = new SettingsStore(join(userData, 'settings.json'), cipher)
+  const record = process.argv.includes('--record')
+  if (record) app.on('before-quit', saveRecording)
   const locate = import.meta.env.DEV && !app.isPackaged && process.argv.includes('--fake-lcu') ? await startFakeClient() : locateClient
 
   let lastView: AppView | undefined
   let window: BrowserWindow | undefined
   const session = new DraftSession({
     locate,
-    makeClient: (creds) => new LcuClient(creds),
+    makeClient: (creds) => (record ? makeRecordingClient(creds) : new LcuClient(creds)),
     makeAdvisor: (apiKey, model, data) => new ClaudeAdvisor({ apiKey, model, data }),
     settings,
     loadStats: () => loadStats(cacheDir),

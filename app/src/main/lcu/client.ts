@@ -7,6 +7,7 @@ import type { LcuCredentials } from "./locate";
 export interface Recording {
   ownedChampions: unknown;
   mastery: unknown;
+  sessionKeyPaths?: string[];
   events: { atMs: number; eventType: "Create" | "Update" | "Delete"; data: unknown }[];
 }
 
