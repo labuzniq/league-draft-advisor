@@ -8,7 +8,7 @@ import { AdviceSchema, buildUserMessage, keepValidPicks, parsePartialAdvice, typ
 export interface AdviceRequest { context: DraftContext; role: Role; state: DraftState; candidates: Candidate[] }
 
 export class AdvisorError extends Error {
-  constructor(message: string, readonly kind: "auth" | "rate-limit" | "refused" | "empty" | "other") {
+  constructor(message: string, readonly kind: "auth" | "account" | "rate-limit" | "refused" | "empty" | "other") {
     super(message);
     this.name = "AdvisorError";
   }
@@ -18,7 +18,16 @@ export interface Advisor { advise(req: AdviceRequest, onPartial: (a: Partial<Adv
 
 function toAdvisorError(error: unknown): unknown {
   if (error instanceof Anthropic.APIUserAbortError) return error;
+  if (error instanceof Anthropic.APIError && error.type === "billing_error") {
+    return new AdvisorError("Your Claude account has no API credit. Add credit or use a key from a plan that includes it.", "account");
+  }
   if (error instanceof Anthropic.AuthenticationError) return new AdvisorError("Your Claude API key was rejected. Check it in Settings.", "auth");
+  if (error instanceof Anthropic.PermissionDeniedError) {
+    return new AdvisorError("Your Claude API key is not allowed to use this model. Check the key and the model in Settings.", "account");
+  }
+  if (error instanceof Anthropic.NotFoundError) {
+    return new AdvisorError("This model is not available for your Claude API key. Choose another model in Settings.", "account");
+  }
   if (error instanceof Anthropic.RateLimitError) return new AdvisorError("Claude is busy right now. Try again in a moment.", "rate-limit");
   if (error instanceof Anthropic.APIError) return new AdvisorError("Could not get suggestions from Claude. Try again in a moment.", "other");
   return error;

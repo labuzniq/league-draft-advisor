@@ -143,6 +143,30 @@ test("a rejected API key becomes an auth error with a plain message", async () =
   expect(error.message).toBe("Your Claude API key was rejected. Check it in Settings.");
 });
 
+const apiError = (status: number, type: string) =>
+  Anthropic.APIError.generate(status, { type: "error", error: { type, message: "detail" } }, undefined, new Headers());
+
+test("an account with no API credit becomes an account error with a plain message", async () => {
+  stream.mockReturnValue(failingStream(apiError(402, "billing_error")));
+  const error = await adviseError();
+  expect(error.kind).toBe("account");
+  expect(error.message).toBe("Your Claude account has no API credit. Add credit or use a key from a plan that includes it.");
+});
+
+test("a key without permission becomes an account error with a plain message", async () => {
+  stream.mockReturnValue(failingStream(apiError(403, "permission_error")));
+  const error = await adviseError();
+  expect(error.kind).toBe("account");
+  expect(error.message).toBe("Your Claude API key is not allowed to use this model. Check the key and the model in Settings.");
+});
+
+test("a model that is not available becomes an account error with a plain message", async () => {
+  stream.mockReturnValue(failingStream(apiError(404, "not_found_error")));
+  const error = await adviseError();
+  expect(error.kind).toBe("account");
+  expect(error.message).toBe("This model is not available for your Claude API key. Choose another model in Settings.");
+});
+
 test("a rate limit becomes a rate-limit error", async () => {
   stream.mockReturnValue(failingStream(new Anthropic.RateLimitError(429, undefined, "rate limited", new Headers())));
   expect((await adviseError()).kind).toBe("rate-limit");
