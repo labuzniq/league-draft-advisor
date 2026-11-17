@@ -16,7 +16,7 @@ You need a Windows PC with League of Legends installed. You need about 30 minute
 3. Start the app with the `--record` flag. Use the path where the installer put it. For example:
 
    ```
-   "%LOCALAPPDATA%\Programs\Draft Advisor\Draft Advisor.exe" --record
+   "%LOCALAPPDATA%\Programs\@ldaapp\Draft Advisor.exe" --record
    ```
 
    If that path does not exist, find the app in the Start menu, right-click it, choose "Open file location", and use that path instead.

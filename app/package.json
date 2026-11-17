@@ -1,6 +1,7 @@
 {
   "name": "@lda/app",
-  "version": "0.0.0",
+  "productName": "Draft Advisor",
+  "version": "0.1.0",
   "private": true,
   "description": "League of Legends draft advisor",
   "main": "./out/main/index.js",
