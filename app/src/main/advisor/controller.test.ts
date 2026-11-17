@@ -190,6 +190,7 @@ test("retry does nothing without a pick state", () => {
   controller.update(toDraftState(makeSession({ myRole: "middle", bans: [1], bansDone: false })));
   controller.retry();
   expect(advisor.calls).toHaveLength(0);
+  expect(lastView()).toEqual({ status: "idle" });
 });
 
 test("reset aborts and clears", async () => {
