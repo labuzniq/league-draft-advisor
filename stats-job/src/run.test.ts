@@ -82,9 +82,26 @@ describe("runOnce", () => {
     const { client, paths } = singlePlayer({}, []);
     await runOnce({ ...base, client, current: file("15.22", 5000) });
     const request = idRequests(paths)[0];
-    expect(request).toContain(`startTime=5000&endTime=${NOW_S - SAFETY_GAP_S}`);
+    expect(request).toContain(`startTime=5001&endTime=${NOW_S - SAFETY_GAP_S}`);
     expect(request).toContain("queue=420");
     expect(request).toContain("start=0&count=100");
+  });
+
+  test("two runs in a row never ask for the same second", async () => {
+    const first = singlePlayer({ M1: match("15.22") }, ["M1"]);
+    const firstResult = await runOnce({ ...base, client: first.client });
+    const second = singlePlayer({}, []);
+    await runOnce({
+      ...base,
+      nowS: NOW_S + 86_400,
+      client: second.client,
+      current: firstResult.current,
+    });
+    const times = (paths: string[]) => {
+      const query = new URLSearchParams(idRequests(paths)[0].split("?")[1]);
+      return { start: Number(query.get("startTime")), end: Number(query.get("endTime")) };
+    };
+    expect(times(second.paths).start).toBeGreaterThan(times(first.paths).end);
   });
 
   test("first run uses a 24 hour window and starts an empty file", async () => {

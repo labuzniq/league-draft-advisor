@@ -34,7 +34,7 @@ export async function runOnce(input: RunInput): Promise<RunResult> {
   const log = input.log ?? (() => undefined);
   let current = input.current && structuredClone(input.current);
   let previous = input.previous && structuredClone(input.previous);
-  const from = current?.windowEnd ?? nowS - FIRST_WINDOW_S;
+  const from = current ? current.windowEnd + 1 : nowS - FIRST_WINDOW_S;
   const to = nowS - SAFETY_GAP_S;
   const seen = new Set<string>();
   let counted = 0;
