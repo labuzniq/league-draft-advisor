@@ -1,6 +1,7 @@
 import type { AppView } from "../../../shared/types";
 
 const MESSAGES = {
+  "no-data": "Champion data could not be loaded. Check your internet connection.",
   "no-client": "Waiting for League of Legends…",
   "no-champ-select": "Waiting for champion select…",
 };

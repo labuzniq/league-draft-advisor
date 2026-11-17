@@ -27,6 +27,7 @@ const DEFAULT_POLL_MS = 3000;
 export class DraftSession {
   private readonly pollMs: number;
   private data: PromptData = { champions: new Map() };
+  private championsLoaded = false;
   private controller?: AdviceController;
   private advice: AdviceView = { status: "idle" };
   private client?: LcuClient;
@@ -43,8 +44,9 @@ export class DraftSession {
   }
 
   async start(): Promise<void> {
-    const [stats, { champions }] = await Promise.all([this.deps.loadStats(), this.deps.loadChampions()]);
-    this.data = { champions, stats };
+    const [stats, champions] = await Promise.all([this.deps.loadStats(), this.tryLoadChampions()]);
+    this.data = { champions: champions ?? new Map(), stats };
+    this.championsLoaded = champions !== undefined;
     this.settingsChanged();
   }
 
@@ -71,7 +73,8 @@ export class DraftSession {
     this.render();
     if (!this.looking) {
       this.looking = true;
-      void this.look(this.generation);
+      if (this.championsLoaded) void this.look(this.generation);
+      else this.schedule(this.generation);
     }
   }
 
@@ -118,14 +121,34 @@ export class DraftSession {
     this.chosenRole = undefined;
   }
 
+  private async tryLoadChampions(): Promise<Map<number, ChampionInfo> | undefined> {
+    try {
+      return (await this.deps.loadChampions()).champions;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private schedule(generation: number): void {
+    this.pollTimer = setTimeout(() => void this.look(generation), this.pollMs);
+  }
+
   private async look(generation: number): Promise<void> {
     this.pollTimer = undefined;
+    if (!this.championsLoaded) {
+      const champions = await this.tryLoadChampions();
+      if (generation !== this.generation) return;
+      if (!champions) return this.schedule(generation);
+      this.data = { ...this.data, champions };
+      this.championsLoaded = true;
+      this.settingsChanged();
+    }
     const creds = await this.deps.locate();
     if (generation !== this.generation) return;
     if (creds && (await this.connect(creds, generation))) return;
     if (generation !== this.generation) return;
     this.render();
-    this.pollTimer = setTimeout(() => void this.look(generation), this.pollMs);
+    this.schedule(generation);
   }
 
   private async connect(creds: LcuCredentials, generation: number): Promise<boolean> {
@@ -168,7 +191,7 @@ export class DraftSession {
     this.connected = false;
     this.endChampSelect();
     this.render();
-    this.pollTimer = setTimeout(() => void this.look(generation), this.pollMs);
+    this.schedule(generation);
   }
 
   private endChampSelect(): void {
@@ -183,6 +206,7 @@ export class DraftSession {
 
   private view(): AppView {
     if (!this.controller) return { screen: "setup" };
+    if (!this.championsLoaded) return { screen: "waiting", reason: "no-data" };
     if (this.draft) {
       return buildDraftView({ draft: this.draft, chosenRole: this.chosenRole, advice: this.advice, champions: this.data.champions, stats: this.data.stats });
     }

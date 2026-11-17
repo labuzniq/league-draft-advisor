@@ -60,6 +60,7 @@ function settingsStore(apiKey?: string): SettingsStore {
 async function startSession(opts: {
   answer?: Advice | "never";
   noStats?: boolean;
+  loadChampions?: () => Promise<{ version: string; champions: Map<number, ChampionInfo> }>;
   settings?: SettingsStore;
   locate?: (fakeCreds: LcuCredentials) => () => Promise<LcuCredentials | undefined>;
 } = {}) {
@@ -80,7 +81,7 @@ async function startSession(opts: {
     },
     settings,
     loadStats: async () => (opts.noStats ? undefined : stats),
-    loadChampions: async () => ({ version: "15.22.1", champions }),
+    loadChampions: opts.loadChampions ?? (async () => ({ version: "15.22.1", champions })),
     onView: (view) => views.push(view),
     pollMs: 20,
   });
@@ -108,6 +109,26 @@ test("setup screen without an API key", async () => {
   const { views, locate } = await startSession({ settings: settingsStore() });
   expect(views).toEqual([{ screen: "setup" }]);
   expect(locate).not.toHaveBeenCalled();
+});
+
+test("shows the no-data screen when champion data cannot be loaded, then recovers", async () => {
+  const loadChampions = vi
+    .fn<() => Promise<{ version: string; champions: Map<number, ChampionInfo> }>>()
+    .mockRejectedValueOnce(new Error("Champion data is not available."))
+    .mockResolvedValue({ version: "15.22.1", champions });
+  const { fake, views, locate, made, last } = await startSession({ loadChampions });
+  expect(views).toEqual([{ screen: "waiting", reason: "no-data" }]);
+  expect(locate).not.toHaveBeenCalled();
+  await enterPickPhase(fake, last);
+  const view = await untilReady(last);
+  expect(view.allies).toMatchObject([{ name: "Jarvan IV" }]);
+  expect(made.at(-1)?.data.champions).toBe(champions);
+  expect(loadChampions).toHaveBeenCalledTimes(2);
+});
+
+test("setup comes first when champion data cannot be loaded and there is no key", async () => {
+  const { views } = await startSession({ settings: settingsStore(), loadChampions: async () => Promise.reject(new Error("offline")) });
+  expect(views).toEqual([{ screen: "setup" }]);
 });
 
 test("waiting until the client is found, then waiting for champion select", async () => {
