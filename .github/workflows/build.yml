@@ -3,6 +3,9 @@ name: Build installers
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     strategy:
@@ -23,7 +26,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      - run: npm run dist -w app -- --publish never
+      - run: npm run dist -w app
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}

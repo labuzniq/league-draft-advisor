@@ -1,5 +1,6 @@
 appId: gg.labuzniq.draftadvisor
 productName: Draft Advisor
+publish: null
 directories:
   output: release
 files:
