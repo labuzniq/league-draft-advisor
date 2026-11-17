@@ -1,0 +1,52 @@
+name: Statistics
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      run_minutes:
+        description: Minutes to collect matches
+        default: "330"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: stats
+
+jobs:
+  stats:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Download the old files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p stats-out
+          assets=$(gh release view stats --json assets --jq '.assets | length' 2>/dev/null || echo 0)
+          if [ "$assets" -gt 0 ]; then
+            gh release download stats --dir stats-out --pattern "*.json"
+          fi
+      - name: Collect statistics
+        env:
+          RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
+          STATS_DIR: stats-out
+          RUN_MINUTES: ${{ inputs.run_minutes || '330' }}
+        run: npm start -w stats-job
+      - name: Create the release if it is missing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view stats > /dev/null 2>&1 || gh release create stats --title "Statistics data" --notes "Data files for the Draft Advisor app. Updated daily."
+      - name: Upload the files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload stats stats-out/*.json --clobber
