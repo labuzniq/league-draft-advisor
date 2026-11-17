@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
@@ -73,5 +73,32 @@ test("loadChampions uses the newest cached version when offline", async () => {
 });
 
 test("loadChampions throws when the download fails and nothing is cached", async () => {
+  await expect(loadChampions(cacheDir, failingFetch)).rejects.toThrow("Champion data is not available.");
+});
+
+const bodyFetch = (body: string): typeof fetch =>
+  (async (input) =>
+    String(input).endsWith("/api/versions.json")
+      ? new Response(JSON.stringify(["15.23.1"]))
+      : new Response(body)) as typeof fetch;
+
+test.each([["not json"], [JSON.stringify({ version: "15.23.1" })]])(
+  "loadChampions ignores a bad download body (%s) and does not cache it",
+  async (body) => {
+    await loadChampions(cacheDir, fakeFetch(["15.22.1"], { "15.22.1": championFull("15.22.1") }));
+    const result = await loadChampions(cacheDir, bodyFetch(body));
+    expect(result.version).toBe("15.22.1");
+    expect(await readdir(cacheDir)).toEqual(["champions-15.22.1.json"]);
+  },
+);
+
+test("loadChampions uses the cache when the champion file is not found", async () => {
+  await loadChampions(cacheDir, fakeFetch(["15.22.1"], { "15.22.1": championFull("15.22.1") }));
+  const result = await loadChampions(cacheDir, fakeFetch(["15.23.1"], {}));
+  expect(result.version).toBe("15.22.1");
+});
+
+test("loadChampions throws when the only cached file is corrupt", async () => {
+  await writeFile(join(cacheDir, "champions-15.22.1.json"), "not json");
   await expect(loadChampions(cacheDir, failingFetch)).rejects.toThrow("Champion data is not available.");
 });

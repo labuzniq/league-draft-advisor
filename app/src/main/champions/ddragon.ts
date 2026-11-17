@@ -68,7 +68,22 @@ const compareVersions = (a: string, b: string): number => {
 
 const cacheFile = (cacheDir: string, version: string): string => join(cacheDir, `champions-${version}.json`);
 
-async function download(cacheDir: string, fetchFn: typeof fetch): Promise<{ version: string; text: string } | undefined> {
+interface Champions {
+  version: string;
+  champions: Map<number, ChampionInfo>;
+}
+
+function parseChampions(text: string, version: string): Champions {
+  const { data } = JSON.parse(text) as ChampionFile;
+  const champions = new Map<number, ChampionInfo>();
+  for (const raw of Object.values(data)) {
+    const info = toChampionInfo(raw, version);
+    champions.set(info.id, info);
+  }
+  return { version, champions };
+}
+
+async function download(cacheDir: string, fetchFn: typeof fetch): Promise<Champions | undefined> {
   try {
     const versionsResponse = await fetchFn(`${DDRAGON_URL}/api/versions.json`);
     if (!versionsResponse.ok) return undefined;
@@ -77,15 +92,16 @@ async function download(cacheDir: string, fetchFn: typeof fetch): Promise<{ vers
     const response = await fetchFn(`${DDRAGON_URL}/cdn/${version}/data/en_US/championFull.json`);
     if (!response.ok) return undefined;
     const text = await response.text();
+    const result = parseChampions(text, version);
     await mkdir(cacheDir, { recursive: true });
     await writeFile(cacheFile(cacheDir, version), text);
-    return { version, text };
+    return result;
   } catch {
     return undefined;
   }
 }
 
-async function readNewestCached(cacheDir: string): Promise<{ version: string; text: string } | undefined> {
+async function readNewestCached(cacheDir: string): Promise<Champions | undefined> {
   try {
     const versions = (await readdir(cacheDir))
       .map((name) => CACHE_NAME.exec(name)?.[1])
@@ -93,23 +109,14 @@ async function readNewestCached(cacheDir: string): Promise<{ version: string; te
       .sort(compareVersions);
     const version = versions.at(-1);
     if (!version) return undefined;
-    return { version, text: await readFile(cacheFile(cacheDir, version), "utf8") };
+    return parseChampions(await readFile(cacheFile(cacheDir, version), "utf8"), version);
   } catch {
     return undefined;
   }
 }
 
-export async function loadChampions(
-  cacheDir: string,
-  fetchFn: typeof fetch = fetch,
-): Promise<{ version: string; champions: Map<number, ChampionInfo> }> {
-  const source = (await download(cacheDir, fetchFn)) ?? (await readNewestCached(cacheDir));
-  if (!source) throw new Error("Champion data is not available.");
-  const { data } = JSON.parse(source.text) as ChampionFile;
-  const champions = new Map<number, ChampionInfo>();
-  for (const raw of Object.values(data)) {
-    const info = toChampionInfo(raw, source.version);
-    champions.set(info.id, info);
-  }
-  return { version: source.version, champions };
+export async function loadChampions(cacheDir: string, fetchFn: typeof fetch = fetch): Promise<Champions> {
+  const result = (await download(cacheDir, fetchFn)) ?? (await readNewestCached(cacheDir));
+  if (!result) throw new Error("Champion data is not available.");
+  return result;
 }
