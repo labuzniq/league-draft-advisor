@@ -1,0 +1,71 @@
+name: Statistics
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      run_minutes:
+        description: Minutes to collect matches
+        default: "330"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: stats
+
+jobs:
+  stats:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      STATS_DIR: ${{ github.workspace }}/stats-out
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Download the old files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          mkdir -p "$STATS_DIR"
+          status=$(gh api -i "repos/$REPO/releases/tags/stats" 2>/dev/null | head -n 1 | cut -d ' ' -f 2 || true)
+          case "$status" in
+            200)
+              count=$(gh release view stats --json assets --jq '[.assets[].name | select(endswith(".json"))] | length') || {
+                echo "Could not list the files of the stats release."
+                exit 1
+              }
+              if [ "$count" -gt 0 ]; then
+                gh release download stats --dir "$STATS_DIR" --pattern "*.json"
+              else
+                echo "The stats release has no data files yet. Starting without old files."
+              fi
+              ;;
+            404)
+              echo "No stats release yet. Starting without old files."
+              ;;
+            *)
+              echo "Could not look up the stats release (status: ${status:-none})."
+              exit 1
+              ;;
+          esac
+      - name: Collect statistics
+        env:
+          RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
+          RUN_MINUTES: ${{ inputs.run_minutes || '330' }}
+        run: npm start -w stats-job
+      - name: Create the release if it is missing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view stats > /dev/null 2>&1 || gh release create stats --title "Statistics data" --notes "Data files for the Draft Advisor app. Updated daily."
+      - name: Upload the files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload stats "$STATS_DIR"/*.json --clobber

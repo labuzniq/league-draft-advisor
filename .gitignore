@@ -1,4 +1,7 @@
 node_modules/
 dist/
+out/
+release/
 .env
 .claude/worktrees/
+stats-out/

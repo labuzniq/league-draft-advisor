@@ -1,0 +1,97 @@
+import Anthropic from "@anthropic-ai/sdk";
+import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import type { Role } from "@lda/shared";
+import type { Advice, DraftState } from "../../shared/types";
+import type { Candidate } from "../draft/candidates";
+import { AdviceSchema, buildUserMessage, keepValidPicks, parsePartialAdvice, type DraftContext, type PromptData } from "./prompt";
+
+export interface AdviceRequest { context: DraftContext; role: Role; state: DraftState; candidates: Candidate[] }
+
+export class AdvisorError extends Error {
+  constructor(message: string, readonly kind: "auth" | "account" | "rate-limit" | "refused" | "empty" | "other") {
+    super(message);
+    this.name = "AdvisorError";
+  }
+}
+
+export interface Advisor { advise(req: AdviceRequest, onPartial: (a: Partial<Advice>) => void, signal: AbortSignal): Promise<Advice> }
+
+function toAdvisorError(error: unknown): unknown {
+  if (error instanceof Anthropic.APIUserAbortError) return error;
+  if (error instanceof Anthropic.APIError && error.type === "billing_error") {
+    return new AdvisorError("Your Claude account has no API credit. Add credit or use a key from a plan that includes it.", "account");
+  }
+  if (error instanceof Anthropic.AuthenticationError) return new AdvisorError("Your Claude API key was rejected. Check it in Settings.", "auth");
+  if (error instanceof Anthropic.PermissionDeniedError) {
+    return new AdvisorError("Your Claude API key is not allowed to use this model. Check the key and the model in Settings.", "account");
+  }
+  if (error instanceof Anthropic.NotFoundError) {
+    return new AdvisorError("This model is not available for your Claude API key. Choose another model in Settings.", "account");
+  }
+  if (error instanceof Anthropic.RateLimitError) return new AdvisorError("Claude is busy right now. Try again in a moment.", "rate-limit");
+  if (error instanceof Anthropic.APIError) return new AdvisorError("Could not get suggestions from Claude. Try again in a moment.", "other");
+  return error;
+}
+
+const ANTHROPIC_API_URL = "https://api.anthropic.com";
+
+// Without a `parse` method the SDK leaves the text unparsed, so refusals, cut-off
+// answers and fallbacks that continue the text in a second block are handled here.
+const ADVICE_FORMAT = { type: "json_schema" as const, schema: zodOutputFormat(AdviceSchema).schema };
+
+function readAdvice(text: string): Advice {
+  try {
+    return AdviceSchema.parse(JSON.parse(text));
+  } catch {
+    throw new AdvisorError("The suggestion could not be read.", "other");
+  }
+}
+
+export class ClaudeAdvisor implements Advisor {
+  private readonly client: Anthropic;
+  private readonly model: string;
+  private readonly data: PromptData;
+  lastUsage?: Anthropic.Beta.BetaUsage;
+
+  constructor(opts: { apiKey: string; model: string; data: PromptData }) {
+    this.client = new Anthropic({ apiKey: opts.apiKey, baseURL: ANTHROPIC_API_URL, authToken: null });
+    this.model = opts.model;
+    this.data = opts.data;
+  }
+
+  private async request(req: AdviceRequest, onPartial: (a: Partial<Advice>) => void, signal: AbortSignal) {
+    let buffer = "";
+    try {
+      const stream = this.client.beta.messages.stream(
+        {
+          model: this.model,
+          max_tokens: 4000,
+          betas: ["server-side-fallback-2026-07-01"],
+          fallbacks: "default",
+          system: [{ type: "text", text: req.context.system, cache_control: { type: "ephemeral" } }],
+          messages: [{ role: "user", content: buildUserMessage(req, this.data) }],
+          output_config: { effort: "low", format: ADVICE_FORMAT },
+        },
+        { signal },
+      );
+      stream.on("text", (delta) => {
+        buffer += delta;
+        onPartial(parsePartialAdvice(buffer));
+      });
+      return await stream.finalMessage();
+    } catch (error) {
+      throw toAdvisorError(error);
+    }
+  }
+
+  async advise(req: AdviceRequest, onPartial: (a: Partial<Advice>) => void, signal: AbortSignal): Promise<Advice> {
+    const message = await this.request(req, onPartial, signal);
+    this.lastUsage = message.usage;
+    if (message.stop_reason === "refusal") throw new AdvisorError("Claude declined to suggest picks for this draft.", "refused");
+    if (message.stop_reason === "max_tokens") throw new AdvisorError("The suggestion was cut off.", "other");
+    const text = message.content.map((block) => (block.type === "text" ? block.text : "")).join("");
+    const advice = keepValidPicks(readAdvice(text), req.candidates);
+    if (advice.picks.length === 0) throw new AdvisorError("Claude did not suggest any of the open champions.", "empty");
+    return advice;
+  }
+}

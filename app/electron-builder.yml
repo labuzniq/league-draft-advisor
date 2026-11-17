@@ -1,0 +1,12 @@
+appId: gg.labuzniq.draftadvisor
+publish: null
+directories:
+  output: release
+files:
+  - out/**
+  - package.json
+win:
+  target: nsis
+mac:
+  target: dmg
+  identity: null
