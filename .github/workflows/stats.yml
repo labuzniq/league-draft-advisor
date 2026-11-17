@@ -29,12 +29,22 @@ jobs:
       - name: Download the old files
         env:
           GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         run: |
           mkdir -p stats-out
-          assets=$(gh release view stats --json assets --jq '.assets | length' 2>/dev/null || echo 0)
-          if [ "$assets" -gt 0 ]; then
-            gh release download stats --dir stats-out --pattern "*.json"
-          fi
+          status=$(gh api -i "repos/$REPO/releases/tags/stats" 2>/dev/null | head -n 1 | cut -d ' ' -f 2 || true)
+          case "$status" in
+            200)
+              gh release download stats --dir stats-out --pattern "*.json"
+              ;;
+            404)
+              echo "No stats release yet. Starting without old files."
+              ;;
+            *)
+              echo "Could not look up the stats release (status: ${status:-none})."
+              exit 1
+              ;;
+          esac
       - name: Collect statistics
         env:
           RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
