@@ -17,6 +17,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^1.10.0",
     "@lda/shared": "*",
+    "ws": "^8.23.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
@@ -24,6 +25,7 @@
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/ws": "^8.18.2",
     "@vitejs/plugin-react": "^6.3.0",
     "electron": "^45.3.3",
     "electron-vite": "^6.0.0",
@@ -32,6 +34,7 @@
     "globals": "^17.14.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "selfsigned": "^5.5.0",
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.73.0",
