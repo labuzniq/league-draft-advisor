@@ -40,16 +40,18 @@ function statsLine(candidate: Candidate, role: Role, stats: StatsFile): string {
   return `${role}: win rate ${percent(candidate.winRate)}, pick rate ${percent(candidate.pickRate)}, ban rate ${percent(banRate(stats, candidate.championId))}, ${candidate.games} games`;
 }
 
-const pickedIds = (state: DraftState): number[] => [...state.allies, ...state.enemies].map((p) => p.championId);
+function dataBlock(id: number, candidates: Map<number, Candidate>, role: Role, data: PromptData): string {
+  const candidate = candidates.get(id);
+  return championBlock(id, data, candidate && data.stats ? statsLine(candidate, role, data.stats) : undefined);
+}
+
+const pickedIds =(state: DraftState): number[] => [...state.allies, ...state.enemies].map((p) => p.championId);
 
 export function buildContext(input: { role: Role; state: DraftState; candidates: Candidate[] }, data: PromptData): DraftContext {
   const { role, state, candidates } = input;
   const byId = new Map(candidates.map((c) => [c.championId, c]));
   const ids = [...new Set([...byId.keys(), ...pickedIds(state)])].sort((a, b) => a - b);
-  const blocks = ids.map((id) => {
-    const candidate = byId.get(id);
-    return championBlock(id, data, candidate && data.stats ? statsLine(candidate, role, data.stats) : undefined);
-  });
+  const blocks = ids.map((id) => dataBlock(id, byId, role, data));
   const system = [COACH_INSTRUCTIONS, data.stats ? STATS_NOTE : NO_STATS_NOTE, "", "Champion data:", "", blocks.join("\n\n")].join("\n");
   return { system, championIds: new Set(ids) };
 }
@@ -60,7 +62,8 @@ export function buildUserMessage(input: { context: DraftContext; role: Role; sta
   const { context, role, state, candidates } = input;
   const ally = (p: DraftPick) => `- ${label(p.championId, data)}, ${p.role ?? "unknown"}`;
   const enemy = (p: DraftPick) => `- ${label(p.championId, data)}, likely ${(data.stats && mainRole(data.stats, p.championId)) ?? "unknown"}`;
-  const newPicks = pickedIds(state).filter((id) => !context.championIds.has(id));
+  const byId = new Map(candidates.map((c) => [c.championId, c]));
+  const newIds = [...new Set([...pickedIds(state), ...byId.keys()])].filter((id) => !context.championIds.has(id));
   const lines = [
     `Your role: ${role}`,
     `Allies:\n${listOrNone(state.allies.map(ally), "\n")}`,
@@ -68,7 +71,7 @@ export function buildUserMessage(input: { context: DraftContext; role: Role; sta
     `Bans: ${listOrNone(state.bans.map((id) => label(id, data)), ", ")}`,
     `Open candidates: ${listOrNone(candidates.map((c) => label(c.championId, data)), ", ")}`,
   ];
-  if (newPicks.length > 0) lines.push(`Champion data for new picks:\n\n${newPicks.map((id) => championBlock(id, data)).join("\n\n")}`);
+  if (newIds.length > 0) lines.push(`Champion data not listed before:\n\n${newIds.map((id) => dataBlock(id, byId, role, data)).join("\n\n")}`);
   return lines.join("\n\n");
 }
 

@@ -75,6 +75,15 @@ test("user message carries data for a newly picked champion that is not in the c
   expect(msg).not.toContain("Ahri ultimate.");
 });
 
+test("user message carries data for a new candidate that is not in the context", () => {
+  const context = buildContext(input, data);
+  const leona: Candidate = { championId: 89, games: 520, winRate: 0.5, pickRate: 0.026, masteryPoints: 0, score: 0 };
+  const msg = buildUserMessage({ context, role: "middle", state, candidates: [...candidates, leona] }, data);
+  expect(msg).toContain("Leona ultimate.");
+  expect(msg).toContain("middle: win rate 50.0%, pick rate 2.6%, ban rate 2.0%, 520 games");
+  expect(msg).not.toContain("Orianna ultimate.");
+});
+
 test("unknown champion does not throw", () => {
   const context = buildContext(input, data);
   const later = { ...state, enemies: [...state.enemies, { championId: 9999 }] };

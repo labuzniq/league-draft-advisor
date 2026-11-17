@@ -1,5 +1,4 @@
-import type { StatsFile } from "@lda/shared";
-import { readFile } from "node:fs/promises";
+import { ROLES, type Role, type RoleStats, type StatsFile } from "@lda/shared";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadChampions } from "../src/main/champions/ddragon";
@@ -25,8 +24,23 @@ if (!apiKey) {
   process.exit(1);
 }
 
-const stats = JSON.parse(await readFile(join(import.meta.dirname, "../test/fixtures/stats.json"), "utf8")) as StatsFile;
+const SYNTHETIC_MATCHES = 20_000;
+
+function syntheticStats(ids: number[]): StatsFile {
+  const champions: StatsFile["champions"] = {};
+  for (const id of ids) {
+    const roles: Partial<Record<Role, RoleStats>> = {};
+    ROLES.forEach((role, index) => {
+      const games = 300 + ((id * 37 + index * 101) % 700);
+      roles[role] = { games, wins: Math.round(games * (0.46 + ((id * 13 + index * 7) % 9) / 100)) };
+    });
+    champions[String(id)] = { bans: (id * 53) % 2000, roles };
+  }
+  return { patch: "synthetic", updatedAt: "2026-01-01T00:00:00Z", windowEnd: 0, matches: SYNTHETIC_MATCHES, champions };
+}
+
 const { champions } = await loadChampions(join(tmpdir(), "lda-measure-champions"));
+const stats = syntheticStats([...champions.keys()]);
 const data = { champions, stats };
 const advisor = new ClaudeAdvisor({ apiKey, model: DEFAULT_MODEL, data });
 const price = PRICES[DEFAULT_MODEL];
@@ -51,6 +65,7 @@ const line = (r: Result) =>
   `first pick ${ms(r.firstPickMs)}, full answer ${ms(r.totalMs)}, input ${r.input}, cache write ${r.cacheWrite}, cache read ${r.cacheRead}, output ${r.output}, cost $${r.cost.toFixed(4)}`;
 
 console.log(`Model: ${DEFAULT_MODEL}`);
+console.log("Statistics: SYNTHETIC numbers derived from champion IDs, not real match data.");
 for (const [name, session] of Object.entries(drafts)) {
   const state = toDraftState(session);
   const candidates = selectCandidates({ state, role: "middle", stats, owned: [], showAll: true });
@@ -70,7 +85,7 @@ for (const [name, session] of Object.entries(drafts)) {
     const cost = (input * price.input + cacheWrite * price.input * CACHE_WRITE_FACTOR + cacheRead * price.cacheRead + output * price.output) / 1_000_000;
     const result = { firstPickMs, totalMs, input, cacheWrite, cacheRead, output, cost };
     results.push(result);
-    console.log(`${name} #${run}: ${line(result)}`);
+    console.log(`${name} #${run}: ${candidates.length} candidates, ${line(result)}`);
   }
 }
 
