@@ -31,6 +31,7 @@ interface Latest { state: DraftState; role: Role; key: string }
 interface Running { abort: AbortController; timeout: ReturnType<typeof setTimeout> }
 
 export class AdviceController {
+  private view?: AdviceView;
   private latest?: Latest;
   private keyInFlight?: string;
   private debounce?: ReturnType<typeof setTimeout>;
@@ -45,13 +46,13 @@ export class AdviceController {
     if (state.phase !== "pick") {
       this.cancel();
       this.latest = undefined;
-      if (state.phase === "ban") this.deps.onView({ status: "idle" });
+      if (state.phase === "ban" || this.view?.status !== "ready") this.show({ status: "idle" });
       return;
     }
     if (!role) {
       this.cancel();
       this.latest = undefined;
-      this.deps.onView({ status: "need-role" });
+      this.show({ status: "need-role" });
       return;
     }
     const key = draftKey(state, role);
@@ -60,7 +61,7 @@ export class AdviceController {
     this.cancel();
     const answer = this.answers.get(key);
     if (answer) {
-      this.deps.onView({ status: "ready", advice: answer });
+      this.show({ status: "ready", advice: answer });
       return;
     }
     this.keyInFlight = key;
@@ -79,7 +80,12 @@ export class AdviceController {
     this.latest = undefined;
     this.context = undefined;
     this.answers.clear();
-    this.deps.onView({ status: "idle" });
+    this.show({ status: "idle" });
+  }
+
+  private show(view: AdviceView): void {
+    this.view = view;
+    this.deps.onView(view);
   }
 
   private cancel(): void {
@@ -100,7 +106,7 @@ export class AdviceController {
     const { state, role, key } = latest;
     const candidates = this.deps.candidatesFor(state, role);
     if (candidates.length === 0) {
-      this.deps.onView({ status: "error", message: NO_CANDIDATES_MESSAGE, fallback: [] });
+      this.show({ status: "error", message: NO_CANDIDATES_MESSAGE, fallback: [] });
       return;
     }
     this.context ??= buildContext({ role, state, candidates }, this.deps.data);
@@ -114,12 +120,12 @@ export class AdviceController {
       }, TIMEOUT_MS),
     };
     this.running = running;
-    this.deps.onView({ status: "loading", partial: {} });
+    this.show({ status: "loading", partial: {} });
     this.deps.advisor
       .advise(
         { context: this.context, role, state, candidates },
         (partial) => {
-          if (this.running === running) this.deps.onView({ status: "loading", partial });
+          if (this.running === running) this.show({ status: "loading", partial });
         },
         abort.signal,
       )
@@ -140,6 +146,6 @@ export class AdviceController {
     if (this.running !== running) return;
     clearTimeout(running.timeout);
     this.running = undefined;
-    this.deps.onView(view);
+    this.show(view);
   }
 }

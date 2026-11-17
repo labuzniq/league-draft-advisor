@@ -112,14 +112,45 @@ test("partial answers show as loading", () => {
   expect(lastView()).toEqual({ status: "loading", partial: { teamRead: "Needs a frontline." } });
 });
 
-test("no request after the player locks in", () => {
+const lockedState = () => toDraftState(makeSession({ myRole: "middle", localLocked: 20 }));
+
+test("lock-in while a request runs aborts it and shows idle", () => {
   controller.update(pickState());
   vi.advanceTimersByTime(DEBOUNCE_MS);
-  controller.update(toDraftState(makeSession({ myRole: "middle", localLocked: 20 })));
+  controller.update(lockedState());
   expect(advisor.calls[0].signal.aborted).toBe(true);
   vi.advanceTimersByTime(DEBOUNCE_MS * 2);
   expect(advisor.calls).toHaveLength(1);
-  expect(lastView()).toEqual({ status: "loading", partial: {} });
+  expect(lastView()).toEqual({ status: "idle" });
+});
+
+test("lock-in during the grouping pause shows idle and starts nothing", () => {
+  controller.update(pickState());
+  vi.advanceTimersByTime(DEBOUNCE_MS - 1);
+  controller.update(lockedState());
+  vi.advanceTimersByTime(DEBOUNCE_MS * 2);
+  expect(advisor.calls).toHaveLength(0);
+  expect(lastView()).toEqual({ status: "idle" });
+});
+
+test("lock-in keeps a ready answer", async () => {
+  controller.update(pickState());
+  vi.advanceTimersByTime(DEBOUNCE_MS);
+  advisor.calls[0].resolve(ADVICE);
+  await vi.advanceTimersByTimeAsync(0);
+  controller.update(lockedState());
+  expect(lastView()).toEqual({ status: "ready", advice: ADVICE });
+});
+
+test("lock-in after an error shows idle", async () => {
+  controller.update(pickState());
+  vi.advanceTimersByTime(DEBOUNCE_MS);
+  advisor.calls[0].reject(new Error("boom"));
+  await vi.advanceTimersByTimeAsync(0);
+  controller.update(lockedState());
+  expect(lastView()).toEqual({ status: "idle" });
+  controller.retry();
+  expect(advisor.calls).toHaveLength(1);
 });
 
 test("need-role until a role is chosen", () => {
