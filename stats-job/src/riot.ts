@@ -53,7 +53,14 @@ export class RiotClient {
         await this.retryOrThrow(failures++, 0, path);
         continue;
       }
-      if (response.ok) return (await response.json()) as T;
+      if (response.ok) {
+        try {
+          return (await response.json()) as T;
+        } catch {
+          await this.retryOrThrow(failures++, 0, path);
+          continue;
+        }
+      }
       if (response.status === 429) {
         const seconds = Number(response.headers.get("Retry-After") ?? DEFAULT_RETRY_AFTER_S);
         await this.sleep(seconds * 1_000);

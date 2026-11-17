@@ -25,7 +25,7 @@ function file(patch: string, windowEnd = 1000): StatsFile {
 
 interface World {
   players?: string[];
-  lists?: Record<string, string[] | number>;
+  lists?: Record<string, string[] | number | Error>;
   matches?: Record<string, MatchDto | number>;
   leagueError?: number;
 }
@@ -43,6 +43,7 @@ function fakeClient(world: World) {
       if (path.includes("/by-puuid/")) {
         const puuid = path.split("/by-puuid/")[1].split("/")[0];
         const value = world.lists?.[puuid] ?? [];
+        if (value instanceof Error) throw value;
         if (typeof value === "number") throw new RiotError(value, path);
         return value;
       }
@@ -166,6 +167,32 @@ describe("runOnce", () => {
     const result = await runOnce({ ...base, client, current: file("15.22") });
     expect(result.skipped).toBe(1);
     expect(result.counted).toBe(1);
+  });
+
+  test("a match whose data makes counting fail is skipped with a generic log line", async () => {
+    const broken = match("15.22");
+    broken.info.participants[0].teamPosition = undefined as unknown as string;
+    const lines: string[] = [];
+    const { client } = singlePlayer({ M1: broken, M2: match("15.22") }, ["M1", "M2"]);
+    const result = await runOnce({ ...base, client, current: file("15.22"), log: (line) => lines.push(line) });
+    expect(result.skipped).toBe(1);
+    expect(result.counted).toBe(1);
+    expect(lines).toContain("Skipped a match (unexpected error).");
+    expect(lines.join("\n")).not.toContain("toLowerCase");
+  });
+
+  test("a player whose match list fails with an unexpected error is skipped", async () => {
+    const lines: string[] = [];
+    const { client } = fakeClient({
+      players: ["p1", "p2"],
+      lists: { p1: new Error("secret detail"), p2: ["M1"] },
+      matches: { M1: match("15.22") },
+    });
+    const result = await runOnce({ ...base, client, current: file("15.22"), log: (line) => lines.push(line) });
+    expect(result.skipped).toBe(1);
+    expect(result.counted).toBe(1);
+    expect(lines).toContain("Skipped a player (unexpected error).");
+    expect(lines.join("\n")).not.toContain("secret detail");
   });
 
   test("a bad key stops the run", async () => {

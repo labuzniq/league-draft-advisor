@@ -41,10 +41,11 @@ export async function runOnce(input: RunInput): Promise<RunResult> {
   let skipped = 0;
 
   const skip = (error: unknown, what: string): void => {
-    if (!(error instanceof RiotError)) throw error;
-    if (isKeyError(error)) throw new Error(`Riot refused the API key (status ${error.status}).`);
+    if (error instanceof RiotError && isKeyError(error)) {
+      throw new Error(`Riot refused the API key (status ${error.status}).`);
+    }
     skipped += 1;
-    log(`Skipped ${what} (status ${error.status}).`);
+    log(`Skipped ${what} (${error instanceof RiotError ? `status ${error.status}` : "unexpected error"}).`);
   };
 
   const players = await listPlayers(client).catch((error: unknown) => {

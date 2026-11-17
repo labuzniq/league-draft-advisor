@@ -87,6 +87,20 @@ describe("RiotClient", () => {
     expect(sleeps).toEqual([1_000, 2_000, 4_000]);
   });
 
+  test("a 2xx body that cannot be read is retried three times, then RiotError with status 0", async () => {
+    const { client, calls, sleeps } = setup(() => new Response("{not json", { status: 200 }));
+    const error = await expectRiotError(client.get(PLATFORM_HOST, "/a"));
+    expect(error.status).toBe(0);
+    expect(calls).toHaveLength(4);
+    expect(sleeps).toEqual([1_000, 2_000, 4_000]);
+  });
+
+  test("a 2xx body that cannot be read once is retried and then returned", async () => {
+    const { client, calls } = setup((n) => (n === 1 ? new Response("{not json", { status: 200 }) : json({ ok: true })));
+    await expect(client.get(PLATFORM_HOST, "/a")).resolves.toEqual({ ok: true });
+    expect(calls).toHaveLength(2);
+  });
+
   test("404 throws RiotError at once", async () => {
     const { client, calls, sleeps } = setup(() => json({}, 404));
     const error = await expectRiotError(client.get(PLATFORM_HOST, "/a"));
