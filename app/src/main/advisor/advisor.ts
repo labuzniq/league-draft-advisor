@@ -27,6 +27,20 @@ function toAdvisorError(error: unknown): unknown {
   return error;
 }
 
+const ANTHROPIC_API_URL = "https://api.anthropic.com";
+
+// Without a `parse` method the SDK leaves the text unparsed, so refusals, cut-off
+// answers and fallbacks that continue the text in a second block are handled here.
+const ADVICE_FORMAT = { type: "json_schema" as const, schema: zodOutputFormat(AdviceSchema).schema };
+
+function readAdvice(text: string): Advice {
+  try {
+    return AdviceSchema.parse(JSON.parse(text));
+  } catch {
+    throw new AdvisorError("The suggestion could not be read.", "other");
+  }
+}
+
 export class ClaudeAdvisor implements Advisor {
   private readonly client: Anthropic;
   private readonly model: string;
@@ -34,7 +48,7 @@ export class ClaudeAdvisor implements Advisor {
   lastUsage?: Anthropic.Beta.BetaUsage;
 
   constructor(opts: { apiKey: string; model: string; data: PromptData }) {
-    this.client = new Anthropic({ apiKey: opts.apiKey });
+    this.client = new Anthropic({ apiKey: opts.apiKey, baseURL: ANTHROPIC_API_URL, authToken: null });
     this.model = opts.model;
     this.data = opts.data;
   }
@@ -50,7 +64,7 @@ export class ClaudeAdvisor implements Advisor {
           fallbacks: "default",
           system: [{ type: "text", text: req.context.system, cache_control: { type: "ephemeral" } }],
           messages: [{ role: "user", content: buildUserMessage(req, this.data) }],
-          output_config: { effort: "low", format: zodOutputFormat(AdviceSchema) },
+          output_config: { effort: "low", format: ADVICE_FORMAT },
         },
         { signal },
       );
@@ -68,8 +82,9 @@ export class ClaudeAdvisor implements Advisor {
     const message = await this.request(req, onPartial, signal);
     this.lastUsage = message.usage;
     if (message.stop_reason === "refusal") throw new AdvisorError("Claude declined to suggest picks for this draft.", "refused");
+    if (message.stop_reason === "max_tokens") throw new AdvisorError("The suggestion was cut off.", "other");
     const text = message.content.map((block) => (block.type === "text" ? block.text : "")).join("");
-    const advice = keepValidPicks(AdviceSchema.parse(JSON.parse(text)), req.candidates);
+    const advice = keepValidPicks(readAdvice(text), req.candidates);
     if (advice.picks.length === 0) throw new AdvisorError("Claude did not suggest any of the open champions.", "empty");
     return advice;
   }
