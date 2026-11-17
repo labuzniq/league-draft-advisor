@@ -2,7 +2,7 @@ import type { StatsFile } from "@lda/shared";
 import { expect, test } from "vitest";
 import fixture from "../../../test/fixtures/stats.json";
 import type { DraftState } from "../../shared/types";
-import { CANDIDATE_LIMIT, selectCandidates, selectCandidatesWithoutStats } from "./candidates";
+import { CANDIDATE_LIMIT, MIN_ROLE_GAMES, selectCandidates, selectCandidatesWithoutStats } from "./candidates";
 
 const stats = fixture as StatsFile;
 
@@ -33,6 +33,28 @@ test("showAll ignores ownership", () => {
 test("drops champions rarely played in the role", () => {
   const ids = idsOf(selectCandidates({ state: draft(), role: "middle", stats, owned: owned([89], [61]), showAll: true }));
   expect(ids).not.toContain(89);
+});
+
+test("a champion needs at least MIN_ROLE_GAMES games in the role", () => {
+  expect(MIN_ROLE_GAMES).toBe(30);
+  const thin: StatsFile = {
+    ...stats,
+    matches: 100,
+    champions: {
+      "1": { bans: 0, roles: { middle: { games: MIN_ROLE_GAMES - 1, wins: MIN_ROLE_GAMES - 1 } } },
+      "2": { bans: 0, roles: { middle: { games: MIN_ROLE_GAMES, wins: 15 } } },
+    },
+  };
+  const ids = idsOf(selectCandidates({ state: draft(), role: "middle", stats: thin, owned: [], showAll: true }));
+  expect(ids).toEqual([2]);
+});
+
+test("falls back to the owned champions by mastery when no champion has enough games", () => {
+  const thin: StatsFile = { ...stats, matches: 1, champions: { "61": { bans: 0, roles: { middle: { games: 1, wins: 1 } } } } };
+  const state = draft({ bans: [103] });
+  const result = selectCandidates({ state, role: "middle", stats: thin, owned: owned([61, 50_000], [3, 90_000], [103, 10_000]), showAll: false });
+  expect(result).toEqual(selectCandidatesWithoutStats({ state, owned: owned([61, 50_000], [3, 90_000], [103, 10_000]) }));
+  expect(idsOf(result)).toEqual([3, 61]);
 });
 
 test("mastery lifts a champion over a slightly stronger one", () => {

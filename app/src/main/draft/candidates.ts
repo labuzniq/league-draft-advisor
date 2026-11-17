@@ -4,6 +4,7 @@ import type { DraftState, OwnedChampion } from "../../shared/types";
 export interface Candidate { championId: number; games: number; winRate: number; pickRate: number; masteryPoints: number; score: number }
 
 export const MIN_ROLE_SHARE = 0.005; // share of all matches a champion needs in the role
+export const MIN_ROLE_GAMES = 30;
 export const CANDIDATE_LIMIT = 25;
 
 function takenIds(state: DraftState): Set<number> {
@@ -21,6 +22,7 @@ export function selectCandidates(input: { state: DraftState; role: Role; stats: 
     const share = pickRate(stats, championId, role);
     if (share < MIN_ROLE_SHARE) continue;
     const roleResult = roleStats(stats, championId, role);
+    if (roleResult.games < MIN_ROLE_GAMES) continue;
     const rate = winRate(roleResult);
     const masteryPoints = mastery.get(championId) ?? 0;
     candidates.push({
@@ -32,6 +34,7 @@ export function selectCandidates(input: { state: DraftState; role: Role; stats: 
       score: (rate - 0.5) * 100 + Math.min(3, (masteryPoints / 100_000) * 3),
     });
   }
+  if (candidates.length === 0) return selectCandidatesWithoutStats({ state, owned });
   return candidates.sort((a, b) => b.score - a.score).slice(0, CANDIDATE_LIMIT);
 }
 
