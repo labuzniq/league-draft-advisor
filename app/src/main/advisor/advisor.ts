@@ -5,9 +5,6 @@ import type { Advice, DraftState } from "../../shared/types";
 import type { Candidate } from "../draft/candidates";
 import { AdviceSchema, buildUserMessage, keepValidPicks, parsePartialAdvice, type DraftContext, type PromptData } from "./prompt";
 
-export const DEFAULT_MODEL = "claude-opus-5-5";
-export const MODELS = ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"] as const;
-
 export interface AdviceRequest { context: DraftContext; role: Role; state: DraftState; candidates: Candidate[] }
 
 export class AdvisorError extends Error {

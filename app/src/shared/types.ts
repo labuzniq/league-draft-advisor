@@ -13,3 +13,20 @@ export interface DraftState {
 export interface OwnedChampion { championId: number; masteryPoints: number }
 export interface Pick { championId: number; reason: string }
 export interface Advice { teamRead: string; picks: Pick[] }
+export interface Settings { model: string; showAll: boolean; hasApiKey: boolean }
+
+export interface ChampionChip { name: string; imageUrl: string; role?: Role }
+export interface PickRow { name: string; imageUrl: string; winRate?: number; reason?: string }
+export type AppView =
+  | { screen: "setup" }
+  | { screen: "waiting"; reason: "no-client" | "no-champ-select" }
+  | { screen: "draft"; patch?: string; statsMissing: boolean; role?: Role; myTurn: boolean; allies: ChampionChip[]; enemies: ChampionChip[];
+      advice: { status: "idle" | "need-role" } | { status: "loading" | "ready"; teamRead?: string; picks: PickRow[] } | { status: "error"; message: string; picks: PickRow[] } };
+export interface AppApi {
+  onView(cb: (view: AppView) => void): void;
+  getSettings(): Promise<Settings>;
+  setSettings(patch: { model?: string; showAll?: boolean }): Promise<Settings>;
+  setApiKey(key: string): Promise<void>;
+  chooseRole(role: Role): void;
+  retry(): void;
+}

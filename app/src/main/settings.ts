@@ -1,8 +1,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { DEFAULT_MODEL, MODELS } from "./advisor/advisor";
+import { DEFAULT_MODEL, MODELS } from "../shared/models";
+import type { Settings } from "../shared/types";
 
-export interface Settings { model: string; showAll: boolean; hasApiKey: boolean }
 export interface KeyCipher { encrypt(text: string): Buffer; decrypt(data: Buffer): string }
 
 interface StoredSettings { model: string; showAll: boolean; encryptedKey?: string }

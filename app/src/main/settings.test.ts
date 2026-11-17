@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { DEFAULT_MODEL, MODELS } from "./advisor/advisor";
+import { DEFAULT_MODEL, MODELS } from "../shared/models";
 import { SettingsStore, type KeyCipher } from "./settings";
 
 const reverse = (text: string) => [...text].reverse().join("");
