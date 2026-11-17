@@ -29,7 +29,7 @@ function list(value: unknown, reduce: (item: unknown) => unknown): unknown[] {
 }
 
 function reduceSession(data: unknown): unknown {
-  if (data === null || typeof data !== "object") return data;
+  if (data === null || typeof data !== "object") return null;
   const session = data as Record<string, unknown>;
   const member = (item: unknown) => pick(item, Object.keys(MEMBER_FIELDS));
   const action = (item: unknown) => pick(item, Object.keys(ACTION_FIELDS));

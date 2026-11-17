@@ -113,6 +113,22 @@ test("key paths hide keys that look like player or account identifiers", async (
   expect(text).not.toContain("123e4567");
 });
 
+test("session data that is not an object is saved as null", async () => {
+  const fake = await startFakeLcu(recording);
+  cleanups.push(() => fake.stop());
+  const client = new LcuClient(fake.creds);
+  cleanups.push(() => client.close());
+  const recorder = new Recorder(client);
+  await recorder.start();
+  await client.connect();
+  const event = "OnJsonApiEvent_lol-champ-select_v1_session";
+  for (const data of ["STRING-LEAK", 424242, true]) await fake.sendRaw(JSON.stringify([8, event, { eventType: "Update", data }]));
+  await vi.waitFor(() => expect(recorder.hasEvents()).toBe(true));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const result = recorder.stop();
+  expect(result.events.map((e) => e.data)).toEqual([null, null, null]);
+});
+
 test("saveRecording writes recording-{time}.json and returns its path", () => {
   const dir = mkdtempSync(join(tmpdir(), "recorder-"));
   cleanups.push(() => rmSync(dir, { recursive: true }));
