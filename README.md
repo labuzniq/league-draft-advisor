@@ -59,7 +59,17 @@ The `stats` release holds these two data files only. No installers are published
 2. Register a personal API key for this project.
 3. In GitHub, open `Settings > Secrets and variables > Actions` and add a secret named `RIOT_API_KEY` with the key as its value.
 
+The key must be a personal API key, which does not expire. A development key stops working after 24 hours, so the daily job would fail with it.
+
 The job reads the key only from the `RIOT_API_KEY` environment variable. It never writes the key or player IDs to a file or a log.
+
+### Run on your own computer
+
+```
+RIOT_API_KEY=<your key> RUN_MINUTES=5 npm start -w stats-job
+```
+
+Without `STATS_DIR`, the files are written to `stats-job/stats-out/`. To use another folder, set `STATS_DIR` to an absolute path, for example `STATS_DIR=/tmp/stats-out`. The job stops with an error when `STATS_DIR` is a relative path.
 
 ### Start a run by hand
 

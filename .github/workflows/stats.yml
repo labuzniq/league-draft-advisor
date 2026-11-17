@@ -19,6 +19,8 @@ jobs:
   stats:
     runs-on: ubuntu-latest
     timeout-minutes: 350
+    env:
+      STATS_DIR: ${{ github.workspace }}/stats-out
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -31,11 +33,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
-          mkdir -p stats-out
+          mkdir -p "$STATS_DIR"
           status=$(gh api -i "repos/$REPO/releases/tags/stats" 2>/dev/null | head -n 1 | cut -d ' ' -f 2 || true)
           case "$status" in
             200)
-              gh release download stats --dir stats-out --pattern "*.json"
+              count=$(gh release view stats --json assets --jq '[.assets[].name | select(endswith(".json"))] | length') || {
+                echo "Could not list the files of the stats release."
+                exit 1
+              }
+              if [ "$count" -gt 0 ]; then
+                gh release download stats --dir "$STATS_DIR" --pattern "*.json"
+              else
+                echo "The stats release has no data files yet. Starting without old files."
+              fi
               ;;
             404)
               echo "No stats release yet. Starting without old files."
@@ -48,7 +58,6 @@ jobs:
       - name: Collect statistics
         env:
           RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
-          STATS_DIR: stats-out
           RUN_MINUTES: ${{ inputs.run_minutes || '330' }}
         run: npm start -w stats-job
       - name: Create the release if it is missing
@@ -59,4 +68,4 @@ jobs:
       - name: Upload the files
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload stats stats-out/*.json --clobber
+        run: gh release upload stats "$STATS_DIR"/*.json --clobber

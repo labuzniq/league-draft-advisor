@@ -1,9 +1,9 @@
 import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import type { StatsFile } from "@lda/shared";
 import { beforeEach, describe, expect, test, vi, type Mock } from "vitest";
-import { main } from "./main";
+import { DEFAULT_STATS_DIR, main } from "./main";
 import type { RunResult, runOnce as realRunOnce } from "./run";
 
 const START_MS = 1_800_000_000_000;
@@ -34,6 +34,16 @@ describe("main", () => {
     await expect(run({ RIOT_API_KEY: undefined })).rejects.toThrow("RIOT_API_KEY is not set.");
     expect(runOnce).not.toHaveBeenCalled();
     expect(await readdir(dir)).toEqual([]);
+  });
+
+  test("rejects a relative STATS_DIR and does nothing", async () => {
+    await expect(run({ STATS_DIR: "stats-out" })).rejects.toThrow("STATS_DIR must be an absolute path.");
+    expect(runOnce).not.toHaveBeenCalled();
+  });
+
+  test("the default folder is the absolute stats-job/stats-out folder", () => {
+    expect(DEFAULT_STATS_DIR).toBe(join(import.meta.dirname, "..", "stats-out"));
+    expect(DEFAULT_STATS_DIR.endsWith(`${sep}stats-job${sep}stats-out`)).toBe(true);
   });
 
   test.each(["0", "-5", "abc", ""])("rejects RUN_MINUTES %j", async (value) => {

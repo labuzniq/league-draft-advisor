@@ -1,11 +1,11 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { StatsFile } from "@lda/shared";
 import { RiotClient, RiotError } from "./riot";
 import { runOnce } from "./run";
 
-const DEFAULT_STATS_DIR = "./stats-out";
+export const DEFAULT_STATS_DIR = join(import.meta.dirname, "..", "stats-out");
 const DEFAULT_RUN_MINUTES = 330;
 
 interface Deps {
@@ -42,6 +42,7 @@ export async function main(env: NodeJS.ProcessEnv, deps: Partial<Deps> = {}): Pr
   if (!Number.isFinite(minutes) || minutes <= 0) throw new Error("RUN_MINUTES must be a positive number.");
 
   const dir = env.STATS_DIR || DEFAULT_STATS_DIR;
+  if (!isAbsolute(dir)) throw new Error("STATS_DIR must be an absolute path.");
   const current = await readStats(dir, "current.json");
   const previous = await readStats(dir, "previous.json");
 
