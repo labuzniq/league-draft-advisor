@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import recordingFile from "../../../test/fixtures/recording.json";
 import { startFakeLcu } from "../../../test/helpers/fake-lcu";
 import type { LcuChampSelectSession } from "../draft/state";
@@ -96,4 +96,26 @@ test("connect rejects when nothing is listening", async () => {
   const { creds } = fake;
   await fake.stop();
   await expect(new LcuClient(creds).connect()).rejects.toThrow();
+});
+
+test("a failed session request closes the socket and fires no callbacks", async () => {
+  const fake = await startFakeLcu(recording, { failSession: true });
+  cleanups.push(() => fake.stop());
+  const client = new LcuClient(fake.creds);
+  const calls: string[] = [];
+  client.onSession(() => calls.push("session"));
+  client.onClose(() => calls.push("close"));
+  await expect(client.connect()).rejects.toThrow(/500/);
+  await vi.waitFor(() => expect(fake.openSockets()).toBe(0));
+  await fake.play();
+  expect(calls).toEqual([]);
+});
+
+test("close does not fire onClose", async () => {
+  const { fake, client } = await connected();
+  let closed = false;
+  client.onClose(() => (closed = true));
+  client.close();
+  await vi.waitFor(() => expect(fake.openSockets()).toBe(0));
+  expect(closed).toBe(false);
 });

@@ -9,7 +9,10 @@ const TOKEN = "fake-token";
 const SESSION_PATH = "/lol-champ-select/v1/session";
 const EVENT_NAME = "OnJsonApiEvent_lol-champ-select_v1_session";
 
-export async function startFakeLcu(recording: Recording): Promise<{ creds: LcuCredentials; play(): Promise<void>; stop(): Promise<void> }> {
+export async function startFakeLcu(
+  recording: Recording,
+  options: { failSession?: boolean } = {},
+): Promise<{ creds: LcuCredentials; play(): Promise<void>; stop(): Promise<void>; openSockets(): number }> {
   const pems = await generate([{ name: "commonName", value: "127.0.0.1" }]);
   const authorized = (header: string | undefined) => header === `Basic ${Buffer.from(`riot:${TOKEN}`).toString("base64")}`;
   const sockets = new Set<WebSocket>();
@@ -24,9 +27,12 @@ export async function startFakeLcu(recording: Recording): Promise<{ creds: LcuCr
     if (!authorized(req.headers.authorization)) return reply(401);
     if (req.url === "/lol-champions/v1/owned-champions-minimal") return reply(200, recording.ownedChampions);
     if (req.url === "/lol-champion-mastery/v1/local-player/champion-mastery") return reply(200, recording.mastery);
+    if (req.url === SESSION_PATH && options.failSession) return reply(500);
     if (req.url === SESSION_PATH) return current === undefined ? reply(404) : reply(200, current);
     reply(404);
   });
+
+  server.on("secureConnection", (socket) => socket.on("error", () => socket.destroy()));
 
   const wss = new WebSocketServer({ noServer: true });
   server.on("upgrade", (req, socket, head) => {
@@ -45,6 +51,7 @@ export async function startFakeLcu(recording: Recording): Promise<{ creds: LcuCr
 
   return {
     creds: { port, token: TOKEN },
+    openSockets: () => sockets.size,
     async play() {
       for (const { eventType, data } of recording.events) {
         current = eventType === "Delete" ? undefined : data;

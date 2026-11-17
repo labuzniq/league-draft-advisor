@@ -23,6 +23,7 @@ export class LcuClient {
   private readonly sessionCallbacks: SessionCallback[] = [];
   private readonly closeCallbacks: (() => void)[] = [];
   private socket: WebSocket | undefined;
+  private closing = false;
 
   constructor(private readonly creds: LcuCredentials) {
     this.authorization = `Basic ${Buffer.from(`riot:${creds.token}`).toString("base64")}`;
@@ -48,13 +49,18 @@ export class LcuClient {
     });
     socket.on("error", () => socket.close());
     socket.on("message", (raw) => this.handleMessage(raw.toString()));
-    socket.on("close", () => this.closeCallbacks.forEach((cb) => cb()));
+    socket.on("close", () => {
+      if (!this.closing) this.closeCallbacks.forEach((cb) => cb());
+    });
     socket.send(JSON.stringify([WS_SUBSCRIBE, SESSION_EVENT]));
 
     try {
       this.emit(await this.getRaw(SESSION_PATH) as LcuChampSelectSession, "Create");
     } catch (error) {
-      if (!(error instanceof Error && error.message.includes("404"))) throw error;
+      if (!(error instanceof Error && error.message.includes("404"))) {
+        this.close();
+        throw error;
+      }
     }
   }
 
@@ -90,6 +96,7 @@ export class LcuClient {
   }
 
   close(): void {
+    this.closing = true;
     this.socket?.terminate();
   }
 
