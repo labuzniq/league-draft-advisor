@@ -42,7 +42,9 @@ Write down what you saw for each one, also when it was wrong.
 
 ## What is in the recording file
 
-The file holds champion numbers and field names only. It does not hold player names, summoner names, or account IDs (identifiers). The app removes them before saving. You can open the file in Notepad and look before you send it.
+The file holds champion numbers and field names only. It does not hold player names, summoner names, or account IDs (identifiers). The app removes them before saving. The file also has a `sessionKeyPaths` list. It shows the names of all fields the League client sent, and never their values. Keys that look like an ID are written as `*`. You can open the file in Notepad and look at the whole file, also the `sessionKeyPaths` list, before you send it.
+
+If League was restarted in the middle of champion select, the file only holds the part after the restart.
 
 ## Send the file back
 

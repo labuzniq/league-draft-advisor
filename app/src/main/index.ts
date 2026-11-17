@@ -1,4 +1,3 @@
-import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Role } from '@lda/shared'
 import { app, BrowserWindow, ipcMain, safeStorage } from 'electron'
@@ -7,7 +6,7 @@ import { ClaudeAdvisor } from './advisor/advisor'
 import { loadChampions } from './champions/ddragon'
 import { LcuClient, type Recording } from './lcu/client'
 import { locateClient, type LcuCredentials } from './lcu/locate'
-import { Recorder } from './lcu/recorder'
+import { Recorder, saveRecording } from './lcu/recorder'
 import { DraftSession } from './session'
 import { SettingsStore, type KeyCipher } from './settings'
 import { loadStats } from './stats/loader'
@@ -28,15 +27,11 @@ async function startFakeClient(): Promise<() => Promise<LcuCredentials>> {
   return async () => fake.creds
 }
 
-function recordingFileName(): string {
-  return `recording-${new Date().toISOString().replace(/[:.]/g, '-')}.json`
-}
-
 let recorder: Recorder | undefined
 
-function saveRecording(): void {
+function saveCurrentRecording(): void {
   if (!recorder?.hasEvents()) return
-  writeFileSync(join(app.getPath('desktop'), recordingFileName()), JSON.stringify(recorder.stop(), null, 2))
+  saveRecording(recorder.stop(), app.getPath('desktop'), new Date())
 }
 
 function makeRecordingClient(creds: LcuCredentials): LcuClient {
@@ -44,7 +39,7 @@ function makeRecordingClient(creds: LcuCredentials): LcuClient {
   recorder = new Recorder(client)
   recorder.start().catch((error: unknown) => console.error('Recording could not start:', error))
   client.onSession((session) => {
-    if (session === null) saveRecording()
+    if (session === null) saveCurrentRecording()
   })
   return client
 }
@@ -75,7 +70,7 @@ async function main(): Promise<void> {
   const cacheDir = join(userData, 'cache')
   const settings = new SettingsStore(join(userData, 'settings.json'), cipher)
   const record = process.argv.includes('--record')
-  if (record) app.on('before-quit', saveRecording)
+  if (record) app.on('before-quit', saveCurrentRecording)
   const locate = import.meta.env.DEV && !app.isPackaged && process.argv.includes('--fake-lcu') ? await startFakeClient() : locateClient
 
   let lastView: AppView | undefined

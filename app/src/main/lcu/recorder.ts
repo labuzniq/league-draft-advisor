@@ -1,3 +1,5 @@
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import type { LcuAction, LcuTeamMember } from "../draft/state";
 import type { LcuClient, Recording } from "./client";
 
@@ -40,12 +42,31 @@ function reduceSession(data: unknown): unknown {
   };
 }
 
+const MAX_KEY_LENGTH = 32;
+const UUID = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i;
+
+function looksLikeIdentifier(key: string): boolean {
+  return /^\d+$/.test(key) || key.length > MAX_KEY_LENGTH || UUID.test(key);
+}
+
+export function saveRecording(recording: Recording, dir: string, now: Date): string | undefined {
+  const path = join(dir, `recording-${now.toISOString().replace(/[:.]/g, "-")}.json`);
+  try {
+    writeFileSync(path, JSON.stringify(recording, null, 2));
+    return path;
+  } catch (error) {
+    console.error("Recording could not be saved:", error instanceof Error ? error.message : "unknown error");
+    return undefined;
+  }
+}
+
 function collectKeyPaths(value: unknown, path: string, into: Set<string>): void {
   if (Array.isArray(value)) {
     value.forEach((item) => collectKeyPaths(item, `${path}[]`, into));
   } else if (value !== null && typeof value === "object") {
     for (const [key, child] of Object.entries(value)) {
-      const childPath = path ? `${path}.${key}` : key;
+      const name = looksLikeIdentifier(key) ? "*" : key;
+      const childPath = path ? `${path}.${name}` : name;
       into.add(childPath);
       collectKeyPaths(child, childPath, into);
     }
