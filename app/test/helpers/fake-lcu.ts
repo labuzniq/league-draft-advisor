@@ -1,5 +1,6 @@
 import { createServer } from "node:https";
 import type { AddressInfo } from "node:net";
+import type { Duplex } from "node:stream";
 import { generate } from "selfsigned";
 import { WebSocketServer, type WebSocket } from "ws";
 import type { Recording } from "../../src/main/lcu/client";
@@ -11,11 +12,12 @@ const EVENT_NAME = "OnJsonApiEvent_lol-champ-select_v1_session";
 
 export async function startFakeLcu(
   recording: Recording,
-  options: { failSession?: boolean } = {},
+  options: { failSession?: boolean; failPaths?: string[]; hangPaths?: string[]; hangUpgrade?: boolean } = {},
 ): Promise<{ creds: LcuCredentials; send(index: number): Promise<void>; play(): Promise<void>; stop(): Promise<void>; openSockets(): number }> {
   const pems = await generate([{ name: "commonName", value: "127.0.0.1" }]);
   const authorized = (header: string | undefined) => header === `Basic ${Buffer.from(`riot:${TOKEN}`).toString("base64")}`;
   const sockets = new Set<WebSocket>();
+  const hungSockets = new Set<Duplex>();
   let current: unknown;
 
   const server = createServer({ key: pems.private, cert: pems.cert }, (req, res) => {
@@ -25,6 +27,8 @@ export async function startFakeLcu(
     };
     if (req.method !== "GET") return reply(405);
     if (!authorized(req.headers.authorization)) return reply(401);
+    if (options.hangPaths?.includes(req.url ?? "")) return;
+    if (options.failPaths?.includes(req.url ?? "")) return reply(500);
     if (req.url === "/lol-champions/v1/owned-champions-minimal") return reply(200, recording.ownedChampions);
     if (req.url === "/lol-champion-mastery/v1/local-player/champion-mastery") return reply(200, recording.mastery);
     if (req.url === SESSION_PATH && options.failSession) return reply(500);
@@ -36,6 +40,10 @@ export async function startFakeLcu(
 
   const wss = new WebSocketServer({ noServer: true });
   server.on("upgrade", (req, socket, head) => {
+    if (options.hangUpgrade) {
+      hungSockets.add(socket);
+      return;
+    }
     if (!authorized(req.headers.authorization)) {
       socket.end("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
       return;
@@ -65,6 +73,7 @@ export async function startFakeLcu(
     },
     async stop() {
       for (const ws of sockets) ws.terminate();
+      for (const socket of hungSockets) socket.destroy();
       wss.close();
       await new Promise<void>((resolve) => {
         server.close(() => resolve());

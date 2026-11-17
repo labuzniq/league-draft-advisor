@@ -2,17 +2,20 @@ import { afterEach, expect, test, vi } from "vitest";
 import recordingFile from "../../../test/fixtures/recording.json";
 import { startFakeLcu } from "../../../test/helpers/fake-lcu";
 import type { LcuChampSelectSession } from "../draft/state";
-import { LcuClient, type Recording } from "./client";
+import { LCU_TIMEOUT_MS, LcuClient, type Recording } from "./client";
 
 const recording = recordingFile as Recording;
+const OWNED_PATH = "/lol-champions/v1/owned-champions-minimal";
+const MASTERY_PATH = "/lol-champion-mastery/v1/local-player/champion-mastery";
+const SHORT_TIMEOUT_MS = 50;
 const cleanups: (() => void | Promise<void>)[] = [];
 
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0)) await cleanup();
 });
 
-async function connected(source: Recording = recording) {
-  const fake = await startFakeLcu(source);
+async function connected(source: Recording = recording, options: Parameters<typeof startFakeLcu>[1] = {}) {
+  const fake = await startFakeLcu(source, options);
   cleanups.push(() => fake.stop());
   const client = new LcuClient(fake.creds);
   cleanups.push(() => client.close());
@@ -69,6 +72,35 @@ test("getOwnedChampions joins ownership and mastery", async () => {
 test("a champion without a mastery entry has 0 points", async () => {
   const { client } = await connected({ ...recording, mastery: [{ championId: 61, championPoints: 100 }] });
   expect(await client.getOwnedChampions()).toEqual([{ championId: 61, masteryPoints: 100 }, { championId: 3, masteryPoints: 0 }]);
+});
+
+test("a failed mastery request counts every champion as 0 points", async () => {
+  const { client } = await connected(recording, { failPaths: [MASTERY_PATH] });
+  expect(await client.getOwnedChampions()).toEqual([{ championId: 61, masteryPoints: 0 }, { championId: 3, masteryPoints: 0 }]);
+});
+
+test("a failed ownership request rejects", async () => {
+  const { client } = await connected(recording, { failPaths: [OWNED_PATH] });
+  await expect(client.getOwnedChampions()).rejects.toThrow(/500/);
+});
+
+test("the League client gets 5 seconds to answer", () => {
+  expect(LCU_TIMEOUT_MS).toBe(5000);
+});
+
+test("getRaw rejects when the League client does not answer in time", async () => {
+  const fake = await startFakeLcu(recording, { hangPaths: [OWNED_PATH] });
+  cleanups.push(() => fake.stop());
+  const client = new LcuClient(fake.creds, SHORT_TIMEOUT_MS);
+  await expect(client.getRaw(OWNED_PATH)).rejects.toThrow("League client did not answer in time");
+});
+
+test("connect rejects when the websocket handshake does not finish in time", async () => {
+  const fake = await startFakeLcu(recording, { hangUpgrade: true });
+  cleanups.push(() => fake.stop());
+  const client = new LcuClient(fake.creds, SHORT_TIMEOUT_MS);
+  cleanups.push(() => client.close());
+  await expect(client.connect()).rejects.toThrow(/timed out/);
 });
 
 test("getRaw rejects with the status for a non-2xx answer", async () => {

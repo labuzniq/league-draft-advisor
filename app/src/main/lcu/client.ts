@@ -16,6 +16,7 @@ const SESSION_PATH = "/lol-champ-select/v1/session";
 const SESSION_EVENT = "OnJsonApiEvent_lol-champ-select_v1_session";
 const WS_SUBSCRIBE = 5;
 const WS_EVENT = 8;
+export const LCU_TIMEOUT_MS = 5000;
 
 type SessionCallback = (session: LcuChampSelectSession | null, eventType: string) => void;
 
@@ -26,7 +27,10 @@ export class LcuClient {
   private socket: WebSocket | undefined;
   private closing = false;
 
-  constructor(private readonly creds: LcuCredentials) {
+  constructor(
+    private readonly creds: LcuCredentials,
+    private readonly timeoutMs = LCU_TIMEOUT_MS,
+  ) {
     this.authorization = `Basic ${Buffer.from(`riot:${creds.token}`).toString("base64")}`;
   }
 
@@ -42,6 +46,7 @@ export class LcuClient {
     const socket = new WebSocket(`wss://${HOST}:${this.creds.port}`, {
       headers: { Authorization: this.authorization },
       rejectUnauthorized: false,
+      handshakeTimeout: this.timeoutMs,
     });
     this.socket = socket;
     await new Promise<void>((resolve, reject) => {
@@ -68,7 +73,7 @@ export class LcuClient {
   async getOwnedChampions(): Promise<OwnedChampion[]> {
     const [owned, mastery] = await Promise.all([
       this.getRaw("/lol-champions/v1/owned-champions-minimal") as Promise<{ id: number }[]>,
-      this.getRaw("/lol-champion-mastery/v1/local-player/champion-mastery") as Promise<{ championId: number; championPoints: number }[]>,
+      (this.getRaw("/lol-champion-mastery/v1/local-player/champion-mastery") as Promise<{ championId: number; championPoints: number }[]>).catch(() => []),
     ]);
     const points = new Map(mastery.map((m) => [m.championId, m.championPoints]));
     return owned.map((c) => ({ championId: c.id, masteryPoints: points.get(c.id) ?? 0 }));
@@ -76,12 +81,18 @@ export class LcuClient {
 
   getRaw(path: string): Promise<unknown> {
     return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(`League client did not answer in time for ${path}`));
+        request.destroy();
+      }, this.timeoutMs);
       const request = get(
         { host: HOST, port: this.creds.port, path, headers: { Authorization: this.authorization, Accept: "application/json" }, rejectUnauthorized: false, agent: false },
         (response) => {
           const chunks: Buffer[] = [];
           response.on("data", (chunk: Buffer) => chunks.push(chunk));
+          response.on("error", reject);
           response.on("end", () => {
+            clearTimeout(timer);
             const status = response.statusCode ?? 0;
             if (status < 200 || status >= 300) return reject(new Error(`League client answered ${status} for ${path}`));
             try {
@@ -92,7 +103,10 @@ export class LcuClient {
           });
         },
       );
-      request.on("error", reject);
+      request.on("error", (error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
     });
   }
 

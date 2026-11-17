@@ -32,6 +32,7 @@ export class DraftSession {
   private advice: AdviceView = { status: "idle" };
   private client?: LcuClient;
   private connected = false;
+  private clientError = false;
   private unreadable = false;
   private owned: OwnedChampion[] = [];
   private draft?: DraftState;
@@ -118,6 +119,7 @@ export class DraftSession {
     this.client?.close();
     this.client = undefined;
     this.connected = false;
+    this.clientError = false;
     this.unreadable = false;
     this.draft = undefined;
     this.chosenRole = undefined;
@@ -149,6 +151,7 @@ export class DraftSession {
     if (generation !== this.generation) return;
     if (creds && (await this.connect(creds, generation))) return;
     if (generation !== this.generation) return;
+    this.clientError = creds !== undefined;
     this.render();
     this.schedule(generation);
   }
@@ -174,6 +177,7 @@ export class DraftSession {
       return true;
     }
     this.connected = true;
+    this.clientError = false;
     this.render();
     return true;
   }
@@ -216,7 +220,8 @@ export class DraftSession {
       return buildDraftView({ draft: this.draft, chosenRole: this.chosenRole, advice: this.advice, champions: this.data.champions, stats: this.data.stats });
     }
     if (this.unreadable) return { screen: "waiting", reason: "unreadable" };
-    return { screen: "waiting", reason: this.connected ? "no-champ-select" : "no-client" };
+    if (this.connected) return { screen: "waiting", reason: "no-champ-select" };
+    return { screen: "waiting", reason: this.clientError ? "client-error" : "no-client" };
   }
 }
 

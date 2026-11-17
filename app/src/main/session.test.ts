@@ -33,6 +33,9 @@ const cipher: KeyCipher = { encrypt: (text) => Buffer.from(text), decrypt: (data
 const noClient: AppView = { screen: "waiting", reason: "no-client" };
 const noChampSelect: AppView = { screen: "waiting", reason: "no-champ-select" };
 const unreadable: AppView = { screen: "waiting", reason: "unreadable" };
+const clientError: AppView = { screen: "waiting", reason: "client-error" };
+const OWNED_PATH = "/lol-champions/v1/owned-champions-minimal";
+const MASTERY_PATH = "/lol-champion-mastery/v1/local-player/champion-mastery";
 const UNREADABLE_EVENT = { atMs: 0, eventType: "Update" as const, data: {} };
 
 class FakeAdvisor implements Advisor {
@@ -75,7 +78,7 @@ async function startSession(opts: {
   const made: { model: string; data: PromptData; advisor: FakeAdvisor }[] = [];
   const settings = opts.settings ?? settingsStore("sk-test");
   const locate = vi.fn(opts.locate?.(fake.creds) ?? (async () => fake.creds));
-  const makeClient = vi.fn((creds: LcuCredentials) => new LcuClient(creds));
+  const makeClient = vi.fn((creds: LcuCredentials) => new LcuClient(creds, 100));
   const session = new DraftSession({
     locate,
     makeClient,
@@ -212,9 +215,11 @@ test("the view never contains player names", async () => {
 });
 
 test("resets the controller when the client closes", async () => {
-  const { fake, made, last } = await startSession({ answer: "never" });
+  let gone = false;
+  const { fake, made, last } = await startSession({ answer: "never", locate: (creds) => async () => (gone ? undefined : creds) });
   await enterPickPhase(fake, last);
   await vi.waitFor(() => expect(made[0].advisor.requests).toHaveLength(1), { timeout: 3000 });
+  gone = true;
   await fake.stop();
   await vi.waitFor(() => expect(last()).toEqual(noClient));
   expect(made[0].advisor.requests[0].signal.aborted).toBe(true);
@@ -232,6 +237,48 @@ test("keeps looking when connecting fails", async () => {
   await vi.waitFor(() => expect(last()).toEqual(noChampSelect));
   expect(makeClient).toHaveBeenCalledTimes(2);
   expect(makeClient.mock.results[0].value).not.toBe(makeClient.mock.results[1].value);
+});
+
+async function brokenClient(options: Parameters<typeof startFakeLcu>[1]) {
+  const fake = await startFakeLcu(recording, options);
+  cleanups.push(() => fake.stop());
+  return fake.creds;
+}
+
+test("shows client-error when the client is found but its first requests fail, then recovers", async () => {
+  const broken = await brokenClient({ failPaths: [OWNED_PATH] });
+  let calls = 0;
+  const { views, locate, last } = await startSession({ locate: (creds) => async () => (++calls <= 2 ? broken : creds) });
+  await vi.waitFor(() => expect(views).toContainEqual(clientError));
+  await vi.waitFor(() => expect(last()).toEqual(noChampSelect));
+  expect(locate).toHaveBeenCalledTimes(3);
+});
+
+test("goes back to no-client when the client is no longer found", async () => {
+  const broken = await brokenClient({ failPaths: [OWNED_PATH] });
+  let calls = 0;
+  const { views, last } = await startSession({ locate: () => async () => (++calls === 1 ? broken : undefined) });
+  await vi.waitFor(() => expect(views).toContainEqual(clientError));
+  await vi.waitFor(() => expect(last()).toEqual(noClient));
+});
+
+test("a client that never answers shows client-error and the session keeps polling", async () => {
+  const hanging = await brokenClient({ hangPaths: [OWNED_PATH] });
+  const { locate, last } = await startSession({ locate: () => async () => hanging });
+  await vi.waitFor(() => expect(last()).toEqual(clientError), { timeout: 3000 });
+  await vi.waitFor(() => expect(locate.mock.calls.length).toBeGreaterThan(2), { timeout: 3000 });
+});
+
+test("a websocket handshake that never finishes shows client-error", async () => {
+  const hanging = await brokenClient({ hangUpgrade: true });
+  const { last } = await startSession({ locate: () => async () => hanging });
+  await vi.waitFor(() => expect(last()).toEqual(clientError), { timeout: 3000 });
+});
+
+test("a failed mastery request still connects", async () => {
+  const noMastery = await brokenClient({ failPaths: [MASTERY_PATH] });
+  const { last } = await startSession({ locate: () => async () => noMastery });
+  await vi.waitFor(() => expect(last()).toEqual(noChampSelect));
 });
 
 test("a settings change rebuilds the advisor", async () => {

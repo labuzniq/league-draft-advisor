@@ -36,6 +36,7 @@ Write down what you saw for each one, also when it was wrong.
 ## What the waiting messages mean
 
 - **Waiting for League of Legends…** The app cannot find the League client. Start the League client and wait a few seconds. If the client is already open, close the app and start it again with `--record`. Then tell us, because the app may be looking in the wrong place for the client.
+- **Found the League client but could not connect to it. Trying again…** The app found the League client on your PC, but the client did not answer, or its first answers failed. The app keeps trying every few seconds. If this stays on screen for more than a minute, close the app and send us the recording file if there is one. Tell us that this message was the one on screen.
 - **Waiting for champion select…** The app is connected to the League client. It is waiting for you to enter champion select. Queue for a game. If you are already in champion select and this stays on screen, tell us.
 - **Champion select could not be read. The League client may have changed.** The League client sent data the app does not understand. Keep playing the champion select to the end so the recording is saved, and send us the file. This one is the most useful for us.
 - **Champion data could not be loaded. Check your internet connection.** The app could not download the champion list. Check that the PC is online. The app tries again by itself every few seconds.

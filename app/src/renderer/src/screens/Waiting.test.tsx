@@ -10,6 +10,11 @@ test("explains when champion data could not be loaded", () => {
   expect(screen.getByText("Champion data could not be loaded. Check your internet connection.")).toBeDefined();
 });
 
+test("explains when the League client was found but could not be connected", () => {
+  render(<Waiting reason="client-error" />);
+  expect(screen.getByText("Found the League client but could not connect to it. Trying again…")).toBeDefined();
+});
+
 test("explains when champion select could not be read", () => {
   render(<Waiting reason="unreadable" />);
   expect(screen.getByText("Champion select could not be read. The League client may have changed.")).toBeDefined();
