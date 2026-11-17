@@ -6,7 +6,11 @@ export default defineConfig({
   main: {
     build: { externalizeDeps: { exclude: ['@lda/shared'] } }
   },
-  preload: {},
+  preload: {
+    build: {
+      rolldownOptions: { output: { format: 'cjs', entryFileNames: '[name].cjs' } }
+    }
+  },
   renderer: {
     resolve: { alias: { '@renderer': resolve('src/renderer/src') } },
     plugins: [react()]

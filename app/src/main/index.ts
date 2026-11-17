@@ -6,7 +6,7 @@ function createWindow(): void {
     width: 900,
     height: 670,
     webPreferences: {
-      preload: join(import.meta.dirname, '../preload/index.mjs'),
+      preload: join(import.meta.dirname, '../preload/index.cjs'),
       sandbox: true
     }
   })
