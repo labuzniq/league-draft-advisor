@@ -114,6 +114,25 @@ describe("runOnce", () => {
     expect(result.previous).toBeUndefined();
   });
 
+  test("a remake on a newer patch does not change the files", async () => {
+    const remake = match("15.23");
+    remake.info.gameDuration = 200;
+    const { client } = singlePlayer({ M1: remake }, ["M1"]);
+    const result = await runOnce({ ...base, client, current: file("15.22") });
+    expect(result.current.patch).toBe("15.22");
+    expect(result.previous).toBeUndefined();
+    expect(result.counted).toBe(0);
+  });
+
+  test("a remake does not start the first file", async () => {
+    const remake = match("15.22");
+    remake.info.gameDuration = 200;
+    const { client } = singlePlayer({ M1: remake }, ["M1"]);
+    await expect(runOnce({ ...base, client })).rejects.toThrow(
+      "No matches were found, so no statistics file was started.",
+    );
+  });
+
   test("a match that fails with 404 is skipped and the run goes on", async () => {
     const { client } = singlePlayer({ M2: match("15.22") }, ["M1", "M2"]);
     const result = await runOnce({ ...base, client, current: file("15.22") });

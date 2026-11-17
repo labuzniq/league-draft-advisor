@@ -1,5 +1,5 @@
 import type { StatsFile } from "@lda/shared";
-import { addMatch, comparePatch, emptyStats, patchOf, type MatchDto } from "./aggregate";
+import { addMatch, comparePatch, emptyStats, isCountable, patchOf, type MatchDto } from "./aggregate";
 import { QUEUE_ID, REGION_HOST } from "./config";
 import { listPlayers } from "./players";
 import { RiotError, type RiotClient } from "./riot";
@@ -58,6 +58,7 @@ export async function runOnce(input: RunInput): Promise<RunResult> {
   log(`Found ${players.length} players.`);
 
   const handleMatch = (match: MatchDto): void => {
+    if (!isCountable(match)) return;
     const patch = patchOf(match.info.gameVersion);
     if (!current) {
       current = emptyStats(patch, to);

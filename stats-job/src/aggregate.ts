@@ -31,15 +31,13 @@ function entry(file: StatsFile, championId: number): ChampionStats {
   return (file.champions[String(championId)] ??= { bans: 0, roles: {} });
 }
 
+export function isCountable({ info }: MatchDto): boolean {
+  return info.queueId === QUEUE_ID && info.gameDuration >= MIN_GAME_SECONDS;
+}
+
 export function addMatch(file: StatsFile, match: MatchDto): boolean {
   const { info } = match;
-  if (
-    info.queueId !== QUEUE_ID ||
-    info.gameDuration < MIN_GAME_SECONDS ||
-    patchOf(info.gameVersion) !== file.patch
-  ) {
-    return false;
-  }
+  if (!isCountable(match) || patchOf(info.gameVersion) !== file.patch) return false;
 
   file.matches += 1;
 
