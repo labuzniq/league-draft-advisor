@@ -17,6 +17,14 @@ npm run dev -w app
 
 The app opens in a window. On first start it asks for your Claude API key.
 
+### See the draft view without League
+
+```
+npm run dev -w app -- -- --fake-lcu
+```
+
+This starts a fake League client inside the app that plays a saved champion select. It works only in development, not in an installed app. The app needs a saved Claude API key to show suggestions.
+
 ## Run the tests
 
 ```
