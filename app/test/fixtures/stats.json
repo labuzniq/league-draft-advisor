@@ -1,0 +1,14 @@
+{
+  "patch": "15.22",
+  "updatedAt": "2026-11-17T00:00:00Z",
+  "windowEnd": 1763337600,
+  "matches": 20000,
+  "champions": {
+    "61": { "bans": 1200, "roles": { "middle": { "games": 500, "wins": 260 }, "utility": { "games": 40, "wins": 19 } } },
+    "3": { "bans": 800, "roles": { "middle": { "games": 450, "wins": 235 }, "utility": { "games": 120, "wins": 60 } } },
+    "103": { "bans": 1500, "roles": { "middle": { "games": 620, "wins": 316 } } },
+    "59": { "bans": 300, "roles": { "jungle": { "games": 380, "wins": 195 }, "top": { "games": 30, "wins": 14 } } },
+    "222": { "bans": 900, "roles": { "bottom": { "games": 700, "wins": 357 } } },
+    "89": { "bans": 400, "roles": { "utility": { "games": 520, "wins": 270 } } }
+  }
+}
