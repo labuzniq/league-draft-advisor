@@ -4,6 +4,7 @@ const MESSAGES = {
   "no-data": "Champion data could not be loaded. Check your internet connection.",
   "no-client": "Waiting for League of Legends…",
   "no-champ-select": "Waiting for champion select…",
+  unreadable: "Champion select could not be read. The League client may have changed.",
 };
 
 export function Waiting({ reason }: { reason: Extract<AppView, { screen: "waiting" }>["reason"] }) {

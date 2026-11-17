@@ -32,6 +32,7 @@ export class DraftSession {
   private advice: AdviceView = { status: "idle" };
   private client?: LcuClient;
   private connected = false;
+  private unreadable = false;
   private owned: OwnedChampion[] = [];
   private draft?: DraftState;
   private chosenRole?: Role;
@@ -117,6 +118,7 @@ export class DraftSession {
     this.client?.close();
     this.client = undefined;
     this.connected = false;
+    this.unreadable = false;
     this.draft = undefined;
     this.chosenRole = undefined;
   }
@@ -177,11 +179,13 @@ export class DraftSession {
   }
 
   private sessionChanged(session: LcuChampSelectSession | null): void {
-    if (session === null) {
-      this.endChampSelect();
+    const draft = session === null ? undefined : readDraft(session);
+    this.unreadable = session !== null && draft === undefined;
+    if (draft) {
+      this.draft = draft;
+      this.controller?.update(draft, this.chosenRole);
     } else {
-      this.draft = toDraftState(session);
-      this.controller?.update(this.draft, this.chosenRole);
+      this.endChampSelect();
     }
     this.render();
   }
@@ -189,6 +193,7 @@ export class DraftSession {
   private clientLost(generation: number): void {
     this.client = undefined;
     this.connected = false;
+    this.unreadable = false;
     this.endChampSelect();
     this.render();
     this.schedule(generation);
@@ -210,6 +215,15 @@ export class DraftSession {
     if (this.draft) {
       return buildDraftView({ draft: this.draft, chosenRole: this.chosenRole, advice: this.advice, champions: this.data.champions, stats: this.data.stats });
     }
+    if (this.unreadable) return { screen: "waiting", reason: "unreadable" };
     return { screen: "waiting", reason: this.connected ? "no-champ-select" : "no-client" };
+  }
+}
+
+function readDraft(session: LcuChampSelectSession): DraftState | undefined {
+  try {
+    return toDraftState(session);
+  } catch {
+    return undefined;
   }
 }

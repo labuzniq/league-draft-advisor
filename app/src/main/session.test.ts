@@ -32,6 +32,8 @@ const champions = new Map(
 const cipher: KeyCipher = { encrypt: (text) => Buffer.from(text), decrypt: (data) => data.toString() };
 const noClient: AppView = { screen: "waiting", reason: "no-client" };
 const noChampSelect: AppView = { screen: "waiting", reason: "no-champ-select" };
+const unreadable: AppView = { screen: "waiting", reason: "unreadable" };
+const UNREADABLE_EVENT = { atMs: 0, eventType: "Update" as const, data: {} };
 
 class FakeAdvisor implements Advisor {
   readonly requests: { req: AdviceRequest; signal: AbortSignal }[] = [];
@@ -60,12 +62,15 @@ function settingsStore(apiKey?: string): SettingsStore {
 async function startSession(opts: {
   answer?: Advice | "never";
   noStats?: boolean;
+  recording?: Recording;
+  beforeStart?: (fake: { send(index: number): Promise<void> }) => Promise<void>;
   loadChampions?: () => Promise<{ version: string; champions: Map<number, ChampionInfo> }>;
   settings?: SettingsStore;
   locate?: (fakeCreds: LcuCredentials) => () => Promise<LcuCredentials | undefined>;
 } = {}) {
-  const fake = await startFakeLcu(recording);
+  const fake = await startFakeLcu(opts.recording ?? recording);
   cleanups.push(() => fake.stop());
+  await opts.beforeStart?.(fake);
   const views: AppView[] = [];
   const made: { model: string; data: PromptData; advisor: FakeAdvisor }[] = [];
   const settings = opts.settings ?? settingsStore("sk-test");
@@ -129,6 +134,29 @@ test("shows the no-data screen when champion data cannot be loaded, then recover
 test("setup comes first when champion data cannot be loaded and there is no key", async () => {
   const { views } = await startSession({ settings: settingsStore(), loadChampions: async () => Promise.reject(new Error("offline")) });
   expect(views).toEqual([{ screen: "setup" }]);
+});
+
+test("shows the unreadable screen for a session it cannot read, then recovers", async () => {
+  const { fake, last } = await startSession({ recording: { ...recording, events: [UNREADABLE_EVENT, ...recording.events] } });
+  await vi.waitFor(() => expect(last()).toEqual(noChampSelect));
+  await fake.send(0);
+  await vi.waitFor(() => expect(last()).toEqual(unreadable));
+  for (const index of [1, 2, 3]) await fake.send(index);
+  const view = await untilReady(last);
+  expect(view.enemies).toMatchObject([{ name: "Ahri" }]);
+});
+
+test("an unreadable first session keeps the connection", async () => {
+  const { fake, makeClient, last } = await startSession({
+    recording: { ...recording, events: [UNREADABLE_EVENT, ...recording.events] },
+    beforeStart: (fake) => fake.send(0),
+  });
+  await vi.waitFor(() => expect(last()).toEqual(unreadable));
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  expect(makeClient).toHaveBeenCalledTimes(1);
+  expect(last()).toEqual(unreadable);
+  await fake.send(4);
+  await vi.waitFor(() => expect(last()).toEqual(noChampSelect));
 });
 
 test("waiting until the client is found, then waiting for champion select", async () => {
