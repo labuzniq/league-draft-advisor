@@ -34,6 +34,8 @@ const noClient: AppView = { screen: "waiting", reason: "no-client" };
 const noChampSelect: AppView = { screen: "waiting", reason: "no-champ-select" };
 const unreadable: AppView = { screen: "waiting", reason: "unreadable" };
 const clientError: AppView = { screen: "waiting", reason: "client-error" };
+const loading: AppView = { screen: "waiting", reason: "loading" };
+const setup: AppView = { screen: "setup" };
 const OWNED_PATH = "/lol-champions/v1/owned-champions-minimal";
 const MASTERY_PATH = "/lol-champion-mastery/v1/local-player/champion-mastery";
 const UNREADABLE_EVENT = { atMs: 0, eventType: "Update" as const, data: {} };
@@ -115,8 +117,41 @@ async function enterPickPhase(fake: { send(index: number): Promise<void> }, last
 
 test("setup screen without an API key", async () => {
   const { views, locate } = await startSession({ settings: settingsStore() });
-  expect(views).toEqual([{ screen: "setup" }]);
+  expect(views.length).toBeGreaterThan(0);
+  expect(views.every((view) => view.screen === "setup")).toBe(true);
   expect(locate).not.toHaveBeenCalled();
+});
+
+function blockedStart(apiKey?: string) {
+  const views: AppView[] = [];
+  let release = () => {};
+  const session = new DraftSession({
+    locate: async () => undefined,
+    makeClient: (creds) => new LcuClient(creds),
+    makeAdvisor: () => new FakeAdvisor(),
+    settings: settingsStore(apiKey),
+    loadStats: async () => stats,
+    loadChampions: () => new Promise((resolve) => (release = () => resolve({ version: "15.22.1", champions }))),
+    onView: (view) => views.push(view),
+    pollMs: 20,
+  });
+  cleanups.push(() => session.stop());
+  const started = session.start();
+  return { views, finish: async () => (release(), await started) };
+}
+
+test("shows the loading view at once while the first downloads run", async () => {
+  const { views, finish } = blockedStart("sk-test");
+  expect(views).toEqual([loading]);
+  await finish();
+  expect(views.at(-1)).toEqual(noClient);
+});
+
+test("shows the setup screen at once when there is no key", async () => {
+  const { views, finish } = blockedStart();
+  expect(views).toEqual([setup]);
+  await finish();
+  expect(views.at(-1)).toEqual(setup);
 });
 
 test("shows the no-data screen when champion data cannot be loaded, then recovers", async () => {
@@ -125,7 +160,7 @@ test("shows the no-data screen when champion data cannot be loaded, then recover
     .mockRejectedValueOnce(new Error("Champion data is not available."))
     .mockResolvedValue({ version: "15.22.1", champions });
   const { fake, views, locate, made, last } = await startSession({ loadChampions });
-  expect(views).toEqual([{ screen: "waiting", reason: "no-data" }]);
+  expect(views).toEqual([loading, { screen: "waiting", reason: "no-data" }]);
   expect(locate).not.toHaveBeenCalled();
   await enterPickPhase(fake, last);
   const view = await untilReady(last);
@@ -136,7 +171,8 @@ test("shows the no-data screen when champion data cannot be loaded, then recover
 
 test("setup comes first when champion data cannot be loaded and there is no key", async () => {
   const { views } = await startSession({ settings: settingsStore(), loadChampions: async () => Promise.reject(new Error("offline")) });
-  expect(views).toEqual([{ screen: "setup" }]);
+  expect(views.length).toBeGreaterThan(0);
+  expect(views.every((view) => view.screen === "setup")).toBe(true);
 });
 
 test("shows the unreadable screen for a session it cannot read, then recovers", async () => {
@@ -166,8 +202,8 @@ test("waiting until the client is found, then waiting for champion select", asyn
   let calls = 0;
   const { views, locate, last } = await startSession({ locate: (creds) => async () => (++calls > 2 ? creds : undefined) });
   await vi.waitFor(() => expect(last()).toEqual(noChampSelect));
-  expect(views[0]).toEqual(noClient);
-  expect(views.filter((view) => view.screen !== "waiting" || view.reason !== "no-client")).toEqual([noChampSelect]);
+  expect(views.slice(0, 2)).toEqual([loading, noClient]);
+  expect(views.slice(1).filter((view) => view.screen !== "waiting" || view.reason !== "no-client")).toEqual([noChampSelect]);
   expect(locate).toHaveBeenCalledTimes(3);
 });
 

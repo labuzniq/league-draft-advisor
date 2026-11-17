@@ -1,6 +1,7 @@
 import type { AppView } from "../../../shared/types";
 
 const MESSAGES = {
+  loading: "Loading game data…",
   "no-data": "Champion data could not be loaded. Check your internet connection.",
   "no-client": "Waiting for League of Legends…",
   "client-error": "Found the League client but could not connect to it. Trying again…",

@@ -46,6 +46,7 @@ export class DraftSession {
   }
 
   async start(): Promise<void> {
+    this.deps.onView(this.deps.settings.getApiKey() ? { screen: "waiting", reason: "loading" } : { screen: "setup" });
     const [stats, champions] = await Promise.all([this.deps.loadStats(), this.tryLoadChampions()]);
     this.data = { champions: champions ?? new Map(), stats };
     this.championsLoaded = champions !== undefined;
