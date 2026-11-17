@@ -39,6 +39,22 @@ test("client receives session events and the end of champion select", async () =
   expect(received[3]).toBeNull();
 });
 
+test("websocket frames that are not the expected shape are ignored", async () => {
+  const { fake, client } = await connected();
+  const events: string[] = [];
+  const delivered = new Promise<void>((resolve) => {
+    client.onSession((_session, eventType) => {
+      events.push(eventType);
+      resolve();
+    });
+  });
+  const event = "OnJsonApiEvent_lol-champ-select_v1_session";
+  for (const frame of [[8, event], [8, event, null], [8, event, "text"], [8, event, { data: {} }]]) await fake.sendRaw(JSON.stringify(frame));
+  await fake.send(0);
+  await delivered;
+  expect(events).toEqual(["Create"]);
+});
+
 test("a session already running at connect is delivered like a Create event", async () => {
   const fake = await startFakeLcu({ ...recording, events: recording.events.slice(0, 2) });
   cleanups.push(() => fake.stop());

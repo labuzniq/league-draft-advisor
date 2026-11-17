@@ -13,7 +13,7 @@ const EVENT_NAME = "OnJsonApiEvent_lol-champ-select_v1_session";
 export async function startFakeLcu(
   recording: Recording,
   options: { failSession?: boolean; failPaths?: string[]; hangPaths?: string[]; hangUpgrade?: boolean } = {},
-): Promise<{ creds: LcuCredentials; send(index: number): Promise<void>; play(): Promise<void>; stop(): Promise<void>; openSockets(): number }> {
+): Promise<{ creds: LcuCredentials; send(index: number): Promise<void>; sendRaw(message: string): Promise<void>; play(): Promise<void>; stop(): Promise<void>; openSockets(): number }> {
   const pems = await generate([{ name: "commonName", value: "127.0.0.1" }]);
   const authorized = (header: string | undefined) => header === `Basic ${Buffer.from(`riot:${TOKEN}`).toString("base64")}`;
   const sockets = new Set<WebSocket>();
@@ -57,17 +57,21 @@ export async function startFakeLcu(
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const port = (server.address() as AddressInfo).port;
 
+  const sendRaw = async (message: string) => {
+    await Promise.all([...sockets].map((ws) => new Promise<void>((resolve) => ws.send(message, () => resolve()))));
+  };
+
   const send = async (index: number) => {
     const { eventType, data } = recording.events[index];
     current = eventType === "Delete" ? undefined : data;
-    const message = JSON.stringify([8, EVENT_NAME, { eventType, data }]);
-    await Promise.all([...sockets].map((ws) => new Promise<void>((resolve) => ws.send(message, () => resolve()))));
+    await sendRaw(JSON.stringify([8, EVENT_NAME, { eventType, data }]));
   };
 
   return {
     creds: { port, token: TOKEN },
     openSockets: () => sockets.size,
     send,
+    sendRaw,
     async play() {
       for (let index = 0; index < recording.events.length; index++) await send(index);
     },

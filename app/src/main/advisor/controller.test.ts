@@ -198,6 +198,41 @@ test("empty answer shows the error with the top 5 candidates", async () => {
   expect(lastView()).toEqual({ status: "error", message: "Claude did not suggest any of the open champions.", fallback: CANDIDATES.slice(0, 5) });
 });
 
+test("a throw while choosing candidates shows the general error without a fallback", () => {
+  candidatesFor.mockImplementation(() => {
+    throw new Error("boom");
+  });
+  controller.update(pickState());
+  expect(() => vi.advanceTimersByTime(DEBOUNCE_MS)).not.toThrow();
+  expect(lastView()).toEqual({ status: "error", message: "Could not get suggestions.", fallback: [] });
+});
+
+test("a throw while building the context shows the general error with the fallback", () => {
+  const broken = {
+    get champions(): never {
+      throw new Error("boom");
+    },
+  } as unknown as PromptData;
+  controller = new AdviceController({ advisor, data: broken, candidatesFor, onView: (v) => views.push(v) });
+  controller.update(pickState());
+  expect(() => vi.advanceTimersByTime(DEBOUNCE_MS)).not.toThrow();
+  expect(advisor.calls).toHaveLength(0);
+  expect(lastView()).toEqual({ status: "error", message: "Could not get suggestions.", fallback: CANDIDATES.slice(0, 5) });
+});
+
+test("a synchronous throw from the advisor shows the general error and no later timeout", () => {
+  vi.spyOn(advisor, "advise").mockImplementation(() => {
+    throw new Error("boom");
+  });
+  controller.update(pickState());
+  expect(() => vi.advanceTimersByTime(DEBOUNCE_MS)).not.toThrow();
+  const error: AdviceView = { status: "error", message: "Could not get suggestions.", fallback: CANDIDATES.slice(0, 5) };
+  expect(lastView()).toEqual(error);
+  const count = views.length;
+  vi.advanceTimersByTime(TIMEOUT_MS);
+  expect(views).toHaveLength(count);
+});
+
 test("no candidates shows an error and makes no request", () => {
   candidatesFor.mockReturnValue([]);
   controller.update(pickState());

@@ -123,7 +123,10 @@ export class LcuClient {
       return;
     }
     if (!Array.isArray(message) || message[0] !== WS_EVENT || message[1] !== SESSION_EVENT) return;
-    const { eventType, data } = message[2] as { eventType: string; data: LcuChampSelectSession | null };
+    const payload: unknown = message[2];
+    if (typeof payload !== "object" || payload === null) return;
+    const { eventType, data } = payload as { eventType: unknown; data: LcuChampSelectSession | null };
+    if (typeof eventType !== "string") return;
     this.emit(eventType === "Delete" ? null : data, eventType);
   }
 

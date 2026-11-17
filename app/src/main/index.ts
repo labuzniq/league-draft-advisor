@@ -118,4 +118,11 @@ async function main(): Promise<void> {
   await session.start()
 }
 
+function logUnexpected(error: unknown): void {
+  console.error(error instanceof Error ? `Unexpected error: ${error.name}: ${error.message}` : 'Unexpected error.')
+}
+
+process.on('uncaughtException', logUnexpected)
+process.on('unhandledRejection', logUnexpected)
+
 void main()

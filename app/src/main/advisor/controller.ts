@@ -92,25 +92,37 @@ export class AdviceController {
     clearTimeout(this.debounce);
     this.debounce = undefined;
     this.keyInFlight = undefined;
-    if (this.running) {
-      clearTimeout(this.running.timeout);
-      this.running.abort.abort();
-      this.running = undefined;
-    }
+    this.stopRunning();
+  }
+
+  private stopRunning(): void {
+    if (!this.running) return;
+    clearTimeout(this.running.timeout);
+    this.running.abort.abort();
+    this.running = undefined;
   }
 
   private start(): void {
     this.debounce = undefined;
     const latest = this.latest;
     if (!latest) return;
-    const { state, role, key } = latest;
-    const candidates = this.deps.candidatesFor(state, role);
+    let fallback: Candidate[] = [];
+    try {
+      const candidates = this.deps.candidatesFor(latest.state, latest.role);
+      fallback = candidates.slice(0, FALLBACK_SIZE);
+      this.request(latest, candidates, fallback);
+    } catch {
+      this.stopRunning();
+      this.show({ status: "error", message: UNKNOWN_ERROR_MESSAGE, fallback });
+    }
+  }
+
+  private request({ state, role, key }: Latest, candidates: Candidate[], fallback: Candidate[]): void {
     if (candidates.length === 0) {
       this.show({ status: "error", message: NO_CANDIDATES_MESSAGE, fallback: [] });
       return;
     }
     this.context ??= buildContext({ role, state, candidates }, this.deps.data);
-    const fallback = candidates.slice(0, FALLBACK_SIZE);
     const abort = new AbortController();
     const running: Running = {
       abort,
